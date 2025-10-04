@@ -152,9 +152,8 @@
                 savedWorkouts.forEach(w => {
                     w.exercises.forEach(ex => {
                         ex.sets.forEach((set, idx) => {
-                            const volume = parseInt(set.reps) * parseFloat(set.weight);
-                            const week = w.date;
-                            csv += `${w.date}\t${ex.name}\t${idx + 1}\t${set.reps}\t${set.weight}\t${w.category}\t${volume}\t${week}\n`;
+                            // Only 6 columns: Date, Exercise, Set, Reps, Weight, Category
+                            csv += `${w.date}\t${ex.name}\t${idx + 1}\t${set.reps}\t${set.weight}\t${w.category}\n`;
                         });
                     });
                 });
