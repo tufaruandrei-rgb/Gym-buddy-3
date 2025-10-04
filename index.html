@@ -177,15 +177,23 @@
                 try {
                     const response = await fetch(sheetsUrl, {
                         method: 'POST',
-                        mode: 'no-cors',
                         headers: {
                             'Content-Type': 'text/plain',
                         },
-                        body: csv
+                        body: csv,
+                        redirect: 'follow'
                     });
-                    alert('Data submitted to Google Sheets!');
+                    
+                    if (response.ok || response.type === 'opaque') {
+                        alert('Data submitted to Google Sheets! Check your sheet to confirm.');
+                        // Clear saved workouts after successful submission
+                        setSavedWorkouts([]);
+                        localStorage.removeItem('gymWorkouts');
+                    } else {
+                        alert('Submission may have failed. Check your Google Sheet or use Copy/Paste.');
+                    }
                 } catch (error) {
-                    alert('Error submitting data. You can still copy/paste manually.');
+                    alert('Error: ' + error.message + '. Try using Copy/Paste instead.');
                 }
             };
 
