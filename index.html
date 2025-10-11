@@ -24,7 +24,7 @@
         const Send = ({ className = "w-5 h-5" }) => (<svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>);
 
         const GymTracker = () => {
-            const exercises = {'Spate': ['Lat pulldown', 'Cable row', 'Diag pulldown', 'Face pulls', 'Hyper extention'],'Piept': ['Bench', 'Chest incline press', 'Chest decline press', 'Chest flies', 'Chest downpush'],'Upper body': ['Shoulder press', 'Shoulder lat extension', 'Bar curl', 'Biceps curl', 'Preacher curl','Dips', 'Weight assist dips', 'Cable extension', 'Rope extension'],'Picioare': ['Squats', 'Leg extension', 'Leg Curls', 'Calf press']};
+            const exercises = {'Spate': ['Lat pulldown', 'Cable row', 'Diag pulldown', 'Face pulls', 'Hyper extention'],'Piept': ['Bench', 'Bench plates', 'Chest incline press', 'Chest decline press', 'Chest flies', 'Chest downpush'],'Upper body': ['Shoulder press', 'Shoulder lat extension', 'Bar curl', 'Biceps curl', 'Preacher curl','Dips', 'Weight assist dips', 'Cable extension', 'Rope extension'],'Picioare': ['Squats', 'Leg extension', 'Leg Curls', 'Calf press']};
             const [workout, setWorkout] = useState({category: 'Spate',date: new Date().toISOString().split('T')[0],exercises: []});
             const [currentExercises, setCurrentExercises] = useState([{ name: exercises['Spate'][0], sets: [{ reps: '', weight: '' }] }]);
             const [savedWorkouts, setSavedWorkouts] = useState([]);
@@ -74,7 +74,23 @@
                 return csv;
             };
 
-            const copyToClipboard = () => {const csv = generateCSV(); navigator.clipboard.writeText(csv); alert('Data copied!');};
+            const copyCurrentWorkout = () => {
+                let text = `Workout Date: ${workout.date}\nCategory: ${workout.category}\n\n`;
+                currentExercises.forEach((ex, i) => {
+                    const completedSets = ex.sets.filter(s => s.reps && s.weight);
+                    if (completedSets.length > 0 || ex.sets.some(s => s.reps || s.weight)) {
+                        text += `${ex.name}:\n`;
+                        ex.sets.forEach((set, j) => {
+                            if (set.reps || set.weight) {
+                                text += `  Set ${j + 1}: ${set.reps || '?'} reps x ${set.weight || '?'}kg\n`;
+                            }
+                        });
+                        text += '\n';
+                    }
+                });
+                navigator.clipboard.writeText(text);
+                alert('Current workout copied! Paste it in the conversation.');
+            };
 
             const submitToSheets = async () => {
                 if (!sheetsUrl) {setShowUrlInput(true); alert('Please set your Google Sheets Web App URL first'); return;}
@@ -86,6 +102,7 @@
                 } catch (error) {alert('Error: ' + error.message);}
             };
 
+            const copyToClipboard = () => {const csv = generateCSV(); navigator.clipboard.writeText(csv); alert('Data copied!');};
             const saveSheetsUrl = () => {localStorage.setItem('sheetsUrl', sheetsUrl); setShowUrlInput(false); alert('Google Sheets URL saved!');};
             const saveGeminiKey = () => {localStorage.setItem('geminiKey', geminiKey); alert('Gemini API Key saved!');};
             const clearHistory = () => {if (confirm('Clear all saved workouts?')) {setSavedWorkouts([]); localStorage.removeItem('gymWorkouts');}};
@@ -126,7 +143,8 @@
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-3"><span className="text-3xl">😊</span><h1 className="text-2xl font-bold">Gym Buddy</h1></div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => {setShowChat(!showChat); setShowHistory(false);}} className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition flex items-center gap-2"><MessageCircle className="w-5 h-5" />AI</button>
+                                    <button onClick={copyCurrentWorkout} className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 transition flex items-center gap-2"><MessageCircle className="w-5 h-5" />Copy Workout</button>
+                                    <a href="https://claude.ai/chat/01931657-4d88-7f23-b3da-c9efbfa0fec4" target="_blank" className="px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition flex items-center gap-2 no-underline text-white"><MessageCircle className="w-5 h-5" />Ask Claude</a>
                                     <button onClick={() => {setShowHistory(!showHistory); setShowChat(false);}} className="px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition">{showHistory ? 'Track' : 'History'}</button>
                                 </div>
                             </div>
