@@ -50,11 +50,19 @@
 
         const GymTracker = () => {
             const exercises = {
-                'Spate': ['Lat pulldown', 'Cable row', 'Diag pulldown', 'Face pulls', 'Hyper extention'],
+                'Spate': ['Lat pulldown', 'Machine row', 'Cable row', 'Diag pulldown', 'Face pulls', 'Hyper extention'],
                 'Piept': ['Bench', 'Bench plates', 'Chest incline press', 'Chest decline press', 'Chest flies', 'Chest downpush'],
                 'Upper body': ['Shoulder press', 'Shoulder lat extension', 'Bar curl', 'Biceps curl', 'Preacher curl', 
                             'Dips', 'Weight assist dips', 'Cable extension', 'Rope extension'],
                 'Picioare': ['Squats', 'Leg extension', 'Leg Curls', 'Calf press']
+            };
+
+            const effortLabels = {
+                1: 'Foarte ușor',
+                2: 'Ușor',
+                3: 'OK',
+                4: 'Greu',
+                5: 'Foarte greu'
             };
 
             const [workout, setWorkout] = useState({
@@ -64,7 +72,7 @@
             });
 
             const [currentExercises, setCurrentExercises] = useState([
-                { name: exercises['Spate'][0], sets: [{ reps: '', weight: '' }] }
+                { name: exercises['Spate'][0], sets: [{ reps: '', weight: '', effort: 3 }] }
             ]);
 
             const [savedWorkouts, setSavedWorkouts] = useState([]);
@@ -83,9 +91,35 @@
                 }
             }, []);
 
+            const calculateWorkoutScore = (exercises) => {
+                let totalSetScore = 0;
+                let totalSets = 0;
+
+                exercises.forEach(ex => {
+                    ex.sets.forEach(set => {
+                        const reps = parseInt(set.reps) || 0;
+                        const weight = parseFloat(set.weight) || 0;
+                        const effort = parseInt(set.effort) || 3;
+                        
+                        totalSetScore += reps * weight * effort;
+                        totalSets++;
+                    });
+                });
+
+                if (totalSets === 0) return 0;
+                
+                const score = Math.min(100, Math.round((totalSetScore / (totalSets * 500)) * 100));
+                return score;
+            };
+
             const addSet = (exerciseIndex) => {
                 const newExercises = [...currentExercises];
-                newExercises[exerciseIndex].sets.push({ reps: '', weight: '' });
+                const lastSet = newExercises[exerciseIndex].sets[newExercises[exerciseIndex].sets.length - 1];
+                newExercises[exerciseIndex].sets.push({ 
+                    reps: lastSet.reps, 
+                    weight: lastSet.weight, 
+                    effort: lastSet.effort 
+                });
                 setCurrentExercises(newExercises);
             };
 
@@ -110,7 +144,7 @@
             const addExercise = () => {
                 setCurrentExercises([
                     ...currentExercises,
-                    { name: exercises[workout.category][0], sets: [{ reps: '', weight: '' }] }
+                    { name: exercises[workout.category][0], sets: [{ reps: '', weight: '', effort: 3 }] }
                 ]);
             };
 
@@ -131,14 +165,20 @@
                     return;
                 }
 
-                const newWorkout = { ...workout, exercises: validExercises, savedAt: new Date().toISOString() };
+                const score = calculateWorkoutScore(validExercises);
+                const newWorkout = { 
+                    ...workout, 
+                    exercises: validExercises, 
+                    savedAt: new Date().toISOString(),
+                    score: score
+                };
                 const newWorkouts = [...savedWorkouts, newWorkout];
                 setSavedWorkouts(newWorkouts);
                 localStorage.setItem('gymWorkouts', JSON.stringify(newWorkouts));
 
-                setCurrentExercises([{ name: exercises[workout.category][0], sets: [{ reps: '', weight: '' }] }]);
+                setCurrentExercises([{ name: exercises[workout.category][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
 
-                alert('Workout saved!');
+                alert(`Workout saved with score: ${score}/100! 💪`);
             };
 
             const generateCSV = () => {
@@ -146,7 +186,7 @@
                 savedWorkouts.forEach(w => {
                     w.exercises.forEach(ex => {
                         ex.sets.forEach((set, idx) => {
-                            csv += `${w.date}\t${ex.name}\t${idx + 1}\t${set.reps}\t${set.weight}\t${w.category}\n`;
+                            csv += `${w.date}\t${ex.name}\t${idx + 1}\t${set.reps}\t${set.weight}\t${w.category}\t\t\t${set.effort || 3}\t${w.score || 0}\n`;
                         });
                     });
                 });
@@ -208,6 +248,10 @@
                 }, 0);
             }, 0);
 
+            const currentScore = calculateWorkoutScore(currentExercises.filter(ex => 
+                ex.sets.some(s => s.reps && s.weight)
+            ));
+
             return (
                 <div className="min-h-screen p-4">
                     <div className="max-w-2xl mx-auto">
@@ -233,7 +277,7 @@
                                         onChange={(e) => {
                                             const cat = e.target.value;
                                             setWorkout({ ...workout, category: cat });
-                                            setCurrentExercises([{ name: exercises[cat][0], sets: [{ reps: '', weight: '' }] }]);
+                                            setCurrentExercises([{ name: exercises[cat][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
                                         }}
                                         className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white"
                                     >
@@ -253,10 +297,16 @@
                                 </div>
                             </div>
 
-                            {totalVolume > 0 && (
-                                <div className="mt-4 flex items-center gap-2 text-purple-300">
-                                    <TrendingUp className="w-5 h-5" />
-                                    <span className="font-semibold">Total Volume: {totalVolume.toFixed(0)} kg</span>
+                            {(totalVolume > 0 || currentScore > 0) && (
+                                <div className="mt-4 grid grid-cols-2 gap-4">
+                                    <div className="flex items-center gap-2 text-purple-300">
+                                        <TrendingUp className="w-5 h-5" />
+                                        <span className="font-semibold">Volume: {totalVolume.toFixed(0)} kg</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-green-300">
+                                        <span className="text-2xl">🎯</span>
+                                        <span className="font-semibold">Score: {currentScore}/100</span>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -318,7 +368,10 @@
                                         <div key={idx} className="bg-white/5 rounded-lg p-4">
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="font-semibold text-purple-300">{w.category}</span>
-                                                <span className="text-sm text-white/60">{w.date}</span>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-sm text-green-300 font-bold">🎯 {w.score || 0}/100</span>
+                                                    <span className="text-sm text-white/60">{w.date}</span>
+                                                </div>
                                             </div>
                                             <div className="text-sm text-white/70">
                                                 {w.exercises.map(ex => ex.name).join(', ')}
@@ -359,40 +412,62 @@
 
                                         <div className="space-y-3 mb-4">
                                             {exercise.sets.map((set, setIndex) => (
-                                                <div key={setIndex} className="flex gap-2 items-center">
-                                                    <span className="text-purple-300 font-semibold w-8">{setIndex + 1}</span>
-                                                    <select
-                                                        value={set.reps}
-                                                        onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', e.target.value)}
-                                                        className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white"
-                                                    >
-                                                        <option value="">Reps</option>
-                                                        {[...Array(40)].map((_, i) => (
-                                                            <option key={i + 1} value={i + 1}>{i + 1}</option>
-                                                        ))}
-                                                    </select>
-                                                    <input
-                                                        type="number"
-                                                        placeholder="Weight (kg)"
-                                                        value={set.weight}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value);
-                                                            if (e.target.value === '' || val >= 0) {
-                                                                updateSet(exerciseIndex, setIndex, 'weight', e.target.value);
-                                                            }
-                                                        }}
-                                                        min="0"
-                                                        step="0.5"
-                                                        className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white placeholder-white/50"
-                                                    />
-                                                    {exercise.sets.length > 1 && (
-                                                        <button
-                                                            onClick={() => removeSet(exerciseIndex, setIndex)}
-                                                            className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"
+                                                <div key={setIndex} className="space-y-2">
+                                                    <div className="flex gap-2 items-center">
+                                                        <span className="text-purple-300 font-semibold w-8">{setIndex + 1}</span>
+                                                        <select
+                                                            value={set.reps}
+                                                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', e.target.value)}
+                                                            className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white"
                                                         >
-                                                            <Trash2 className="w-5 h-5" />
-                                                        </button>
-                                                    )}
+                                                            <option value="">Reps</option>
+                                                            {[...Array(40)].map((_, i) => (
+                                                                <option key={i + 1} value={i + 1}>{i + 1}</option>
+                                                            ))}
+                                                        </select>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="Weight (kg)"
+                                                            value={set.weight}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                if (e.target.value === '' || val >= 0) {
+                                                                    updateSet(exerciseIndex, setIndex, 'weight', e.target.value);
+                                                                }
+                                                            }}
+                                                            min="0"
+                                                            step="0.5"
+                                                            className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white placeholder-white/50"
+                                                        />
+                                                        {exercise.sets.length > 1 && (
+                                                            <button
+                                                                onClick={() => removeSet(exerciseIndex, setIndex)}
+                                                                className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"
+                                                            >
+                                                                <Trash2 className="w-5 h-5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    <div className="flex gap-2 pl-10">
+                                                        {[1, 2, 3, 4, 5].map(level => (
+                                                            <button
+                                                                key={level}
+                                                                onClick={() => updateSet(exerciseIndex, setIndex, 'effort', level)}
+                                                                className={`flex-1 py-2 px-1 rounded-lg transition text-xs ${
+                                                                    set.effort === level 
+                                                                        ? 'bg-orange-600 text-white' 
+                                                                        : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                                                }`}
+                                                                title={effortLabels[level]}
+                                                            >
+                                                                {'💪'.repeat(level)}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="text-xs text-purple-300 text-center pl-10">
+                                                        {effortLabels[set.effort || 3]}
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
