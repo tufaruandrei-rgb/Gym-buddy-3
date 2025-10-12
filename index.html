@@ -1,580 +1,510 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Gym Buddy — v3</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Gym Buddy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white min-h-screen">
-  <div id="app"></div>
+    <div id="app"></div>
 
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    <script type="text/babel">
+        const { useState, useEffect } = React;
 
-    /***********************
-     * Utilities / Helpers *
-     ***********************/
-    const monthMap = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+        const Horse = ({ className = "w-6 h-6" }) => (
+            <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+                <path d="M20,8h-2.5c0-1.5-0.8-2.5-2-2.5S14,6.5,14,8h-1c-0.6,0-1,0.4-1,1v2c0,0.6,0.4,1,1,1h0.5L12,16H9l-1.5-3H6 c-0.6,0-1,0.4-1,1v5c0,0.6,0.4,1,1,1h1v1c0,0.6,0.4,1,1,1h1c0.6,0,1-0.4,1-1v-1h4v1c0,0.6,0.4,1,1,1h1c0.6,0,1-0.4,1-1v-1h1 c0.6,0,1-0.4,1-1v-5c0-0.6-0.4-1-1-1h-1.5L14,12h0.5c0.6,0,1-0.4,1-1V9c0-0.6-0.4-1-1-1h-0.5c0-0.5,0.2-1,0.5-1s0.5,0.5,0.5,1H20 c0.6,0,1-0.4,1-1S20.6,8,20,8z M16,6c0.3,0,0.5,0.2,0.5,0.5S16.3,7,16,7s-0.5-0.2-0.5-0.5S15.7,6,16,6z"/>
+            </svg>
+        );
 
-    function parseDateToISO(d) {
-      if (!d) return null;
-      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-      const parsed = new Date(d);
-      if (!isNaN(parsed.getTime())) return new Date(parsed.getTime() - parsed.getTimezoneOffset()*60000).toISOString().slice(0,10);
-      const m = d.trim().match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2})$/);
-      if (m) {
-        const day = parseInt(m[1],10);
-        const mon = monthMap[m[2].toLowerCase()];
-        const year = 2000 + parseInt(m[3],10);
-        const dt = new Date(Date.UTC(year, mon, day));
-        return dt.toISOString().slice(0,10);
-      }
-      return null;
-    }
-    function toSheetDate(iso) {
-      const dt = new Date(iso+"T00:00:00Z");
-      const day = dt.getUTCDate();
-      const mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][dt.getUTCMonth()];
-      const yy = String(dt.getUTCFullYear()).slice(-2);
-      return `${day}-${mon}-${yy}`;
-    }
-    function weekStart(iso) {
-      const dt = new Date(iso+"T00:00:00Z");
-      const day = dt.getUTCDay();
-      const diff = (day === 0 ? -6 : 1 - day);
-      const monday = new Date(dt);
-      monday.setUTCDate(dt.getUTCDate() + diff);
-      return toSheetDate(monday.toISOString().slice(0,10));
-    }
-    const rnd = (n)=>Math.round(n);
+        const Plus = ({ className = "w-5 h-5" }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+        );
 
-    /***********************
-     * Scoring Logic (JS)  *
-     ***********************/
-    function scoreSetFallback(reps, effort) {
-      const repsAdj = reps <= 6 ? reps*3 : (reps<=10 ? 18+(reps-6)*2.5 : 28+(reps-10)*1.2);
-      const effortAdj = repsAdj + (effort-1)*5;
-      const maxEff = [0,70,80,85,95,100][effort] || 70;
-      return rnd(Math.min(maxEff, effortAdj));
-    }
-    function scoreFromRatioAdj(ratioAdj) {
-      if (ratioAdj >= 1.07) return 100;
-      if (ratioAdj >= 1.05) return rnd(97+(ratioAdj-1.05)/0.02*3);
-      if (ratioAdj >= 1.00) return rnd(92+(ratioAdj-1.00)/0.05*5);
-      if (ratioAdj >= 0.90) return rnd(85+(ratioAdj-0.90)/0.10*7);
-      if (ratioAdj >= 0.80) return rnd(75+(ratioAdj-0.80)/0.10*10);
-      return rnd((ratioAdj/0.80)*75);
-    }
-    function targetMultForSet(setNo) {
-      if (setNo === 1) return 0.7;
-      if (setNo >= 4) return 0.8;
-      return 1.0;
-    }
+        const Trash2 = ({ className = "w-5 h-5" }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        );
 
-    /**************************************
-     * Local Storage Keys
-     **************************************/
-    const LS_HISTORY = 'gb_history_v3';     // raw sets (for PR/Last)
-    const LS_PENDING = 'gb_pending_v3';     // processed rows ready to send to Sheets
-    const LS_SHEETS_URL = 'sheetsUrl';      // keep your existing key name
-    function loadLS(key, fallback){ try{ const s=localStorage.getItem(key); return s?JSON.parse(s):fallback;}catch{return fallback;} }
-    function saveLS(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+        const TrendingUp = ({ className = "w-5 h-5" }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+        );
 
-    /*********************
-     * CSV Import (CSV)  *
-     *********************/
-    function mapCsvRowToRecord(row) {
-      const get = (keys) => {
-        for (const k of keys) {
-          if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') return String(row[k]).trim();
-        }
-        return '';
-      };
-      const dateStr = get(['Data','Date']);
-      const exercise = get(['Exercitiu','Exercise','Exercitu','Exercitiu ']);
-      const setStr = get(['Set']);
-      const repsStr = get(['Reps']);
-      const weightStr = get(['Greutate','Weight']);
-      const category = get(['Zi de?','Category','Categorie']);
-      const effortStr = get(['Efort rating','Effort','Effort rating ']);
-      const volumeStr = get(['Volum','Volume']);
+        const Upload = ({ className = "w-4 h-4" }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+        );
 
-      const dateISO = parseDateToISO(dateStr);
-      if (!dateISO || !exercise) return null;
-      const setNumber = parseInt(setStr||'1',10)||1;
-      const reps = parseInt(repsStr||'0',10)||0;
-      const weight = parseFloat(weightStr||'0')||0;
-      const effort = parseInt(effortStr||'3',10)||3;
-      const volume = volumeStr ? (parseFloat(volumeStr)||0) : (reps*weight);
+        const GymTracker = () => {
+            const exercises = {
+                'Spate': ['Lat pulldown', 'Machine row', 'Cable row', 'Diag pulldown', 'Face pulls', 'Hyper extention'],
+                'Piept': ['Bench', 'Bench plates', 'Chest incline press', 'Chest decline press', 'Chest flies', 'Chest downpush'],
+                'Upper body': ['Shoulder press', 'Shoulder lat extension', 'Bar curl', 'Biceps curl', 'Preacher curl', 
+                            'Dips', 'Weight assist dips', 'Cable extension', 'Rope extension'],
+                'Picioare': ['Squats', 'Leg extension', 'Leg Curls', 'Calf press']
+            };
 
-      return { dateISO, dateStr: toSheetDate(dateISO), category: category||'', exercise, setNumber, reps, weight, effort, volume };
-    }
-    function parseCSVText(text) {
-      const res = Papa.parse(text, { header:true, skipEmptyLines:true });
-      const out=[];
-      for (const row of res.data) {
-        const rec = mapCsvRowToRecord(row);
-        if (rec) out.push(rec);
-      }
-      out.sort((a,b)=> a.dateISO.localeCompare(b.dateISO) || a.exercise.localeCompare(b.exercise) || a.setNumber-b.setNumber);
-      return out;
-    }
+            const effortLabels = {
+                1: 'Foarte ușor',
+                2: 'Ușor',
+                3: 'OK',
+                4: 'Greu',
+                5: 'Foarte greu'
+            };
 
-    /*********************
-     * PR / Last helpers *
-     *********************/
-    function maxSetVolumeBefore(history, exercise, dateISO) {
-      const list = history.filter(r=> r.exercise===exercise && r.dateISO < dateISO);
-      if (!list.length) return null;
-      return Math.max(...list.map(r=> r.volume||0));
-    }
-    function maxWeightBefore(history, exercise, dateISO) {
-      const list = history.filter(r=> r.exercise===exercise && r.dateISO < dateISO);
-      if (!list.length) return null;
-      return Math.max(...list.map(r=> r.weight||0));
-    }
-    function lastSessionMaxWeight(history, exercise, dateISO) {
-      const dates = Array.from(new Set(history.filter(r=> r.exercise===exercise && r.dateISO < dateISO).map(r=> r.dateISO))).sort();
-      if (!dates.length) return null;
-      const lastDate = dates[dates.length-1];
-      const list = history.filter(r=> r.exercise===exercise && r.dateISO===lastDate);
-      if (!list.length) return null;
-      return Math.max(...list.map(r=> r.weight||0));
-    }
-    function maxDailyVolumeBefore(history, exercise, dateISO) {
-      const filtered = history.filter(r=> r.exercise===exercise && r.dateISO < dateISO);
-      if (!filtered.length) return null;
-      const dayMap = new Map();
-      for (const r of filtered) {
-        dayMap.set(r.dateISO, (dayMap.get(r.dateISO)||0) + (r.volume||0));
-      }
-      return Math.max(...dayMap.values());
-    }
-
-    /**************************
-     * Core calculation suite *
-     **************************/
-    function computeSetScore({ reps, weight, effort, exercise, setNumber, dateISO }, history) {
-      const volume = reps*weight;
-      const helper = maxSetVolumeBefore(history, exercise, dateISO);
-      const prWeight = maxWeightBefore(history, exercise, dateISO);
-      const lastW = lastSessionMaxWeight(history, exercise, dateISO);
-
-      if (!helper || !prWeight) {
-        return { score: scoreSetFallback(reps, effort), helper:'TBD', prWeight:'TBD', lastWeight: (lastW??'—'), volume };
-      }
-      const targetMult = targetMultForSet(setNumber);
-      const ratioRaw = volume / (helper * targetMult);
-      const effortMult = 0.85 + effort*0.06;
-      const ratioAdj = ratioRaw * effortMult;
-      const score = scoreFromRatioAdj(ratioAdj);
-      return { score, helper, prWeight, lastWeight:(lastW??'—'), volume };
-    }
-    function computeExerciseScore({ exercise, dateISO }, setRowsForExerciseDay, history) {
-      const avgSet = setRowsForExerciseDay.reduce((s,r)=>s+r.setScore,0) / (setRowsForExerciseDay.length||1);
-      const volCur = setRowsForExerciseDay.reduce((s,r)=>s+r.volume,0);
-      const volMaxBefore = maxDailyVolumeBefore(history, exercise, dateISO);
-      let factor = 1;
-      if (volMaxBefore && volMaxBefore>0) {
-        factor = Math.min(1, (volCur/volMaxBefore)*0.98);
-      }
-      return rnd(avgSet * factor);
-    }
-    function computeWorkoutScore(exScores) {
-      if (!exScores.length) return 0;
-      return rnd(exScores.reduce((s,v)=>s+v,0) / exScores.length);
-    }
-
-    /*********************
-     * Effort Selector   *
-     *********************/
-    function EffortSelector({ value, onChange }) {
-      const [hover, setHover] = React.useState(null);
-      const active = (hover ?? value ?? 0);
-      return (
-        <div className="flex gap-1 pl-10 items-center">
-          {[1,2,3,4,5].map(level => (
-            <button
-              key={level}
-              type="button"
-              onClick={()=>onChange(level)}
-              onMouseEnter={()=>setHover(level)}
-              onMouseLeave={()=>setHover(null)}
-              className="focus:outline-none"
-              title={`${level}/5`}
-            >
-              <span className={`text-3xl transition-colors duration-150 ${level <= active ? 'text-yellow-400' : 'text-gray-500'}`}>
-                💪
-              </span>
-            </button>
-          ))}
-        </div>
-      );
-    }
-
-    /*********************
-     * Main App          *
-     *********************/
-    function GymTracker() {
-      const exercisesByCat = {
-        'Spate': ['Lat pulldown','Machine row','Cable row','Diag pulldown','Face pulls','Hyper extention'],
-        'Piept': ['Bench','Bench plates','Chest incline press','Chest decline press','Chest flies','Chest downpush'],
-        'Upper body': ['Shoulder press','Shoulder lat extension','Bar curl','Biceps curl','Preacher curl','Dips','Weight assist dips','Cable extension','Rope extension'],
-        'Picioare': ['Squats','Leg extension','Leg Curls','Calf press']
-      };
-      const effortLabels = {1:'Foarte ușor',2:'Ușor',3:'OK',4:'Greu',5:'Foarte greu'};
-
-      const [history, setHistory] = useState(loadLS(LS_HISTORY, []));
-      const [pending, setPending] = useState(loadLS(LS_PENDING, []));
-      const [sheetsUrl, setSheetsUrl] = useState(localStorage.getItem(LS_SHEETS_URL) || '');
-      const [showUrlInput, setShowUrlInput] = useState(!sheetsUrl);
-      const [showHistory, setShowHistory] = useState(false);
-
-      const todayISO = new Date().toISOString().slice(0,10);
-      const [workout, setWorkout] = useState({ category:'Spate', dateISO: todayISO, feeling: null });
-      const [currentExercises, setCurrentExercises] = useState([{ name:(exercisesByCat['Spate']||[])[0]||'', sets:[{reps:'',weight:'',effort:3}] }]);
-
-      const currentTotalVolume = useMemo(()=>{
-        return currentExercises.reduce((sum, ex)=> sum + ex.sets.reduce((s,set)=> s + ((parseInt(set.reps)||0)*(parseFloat(set.weight)||0)), 0), 0);
-      }, [currentExercises]);
-
-      // UI actions
-      const addExercise = ()=> setCurrentExercises(exs=>[...exs, {name:(exercisesByCat[workout.category]||[])[0]||'', sets:[{reps:'',weight:'',effort:3}]}]);
-      const removeExercise = (idx)=> setCurrentExercises(exs=>exs.filter((_,i)=>i!==idx));
-      const updateExerciseName = (idx, name)=> setCurrentExercises(exs=>exs.map((e,i)=> i===idx?{...e,name}:e));
-      const addSet = (exIdx)=> setCurrentExercises(exs=>exs.map((e,i)=> i!==exIdx?e:{...e, sets:[...e.sets, {...(e.sets[e.sets.length-1]||{reps:'',weight:'',effort:3})}]}));
-      const removeSet = (exIdx, setIdx)=> setCurrentExercises(exs=>exs.map((e,i)=> i!==exIdx?e:{...e, sets:e.sets.filter((_,j)=>j!==setIdx)}));
-      const updateSet = (exIdx,setIdx,field,val)=> setCurrentExercises(exs=>exs.map((e,i)=> i!==exIdx?e:{...e, sets:e.sets.map((s,j)=> j===setIdx?{...s,[field]:val}:s)}));
-
-      // Build processed rows for current workout (ready for Sheets)
-      function buildProcessedRowsForCurrent() {
-        const dateISO = workout.dateISO;
-        const dateStr = toSheetDate(dateISO);
-        theWeek = weekStart(dateISO);
-        const week = theWeek;
-        const feeling = workout.feeling || '';
-
-        const allSetRows = [];
-        currentExercises.forEach(ex => {
-          const exercise = ex.name;
-          const category = workout.category;
-          const setsData = [];
-          ex.sets.forEach((set, i)=>{
-            const reps = parseInt(set.reps)||0;
-            const weight = parseFloat(set.weight)||0;
-            const effort = parseInt(set.effort)||3;
-            if (!(reps>0 && weight>=0)) return;
-            const setNumber = i+1;
-            const { score:setScore, helper, prWeight, lastWeight, volume } = computeSetScore({ reps, weight, effort, exercise, setNumber, dateISO }, history);
-            setsData.push({ setNumber, reps, weight, effort, setScore, helper, prWeight, lastWeight, volume });
-          });
-          if (setsData.length) {
-            const exerciseScore = computeExerciseScore({ exercise, dateISO }, setsData, history);
-            setsData.forEach(s=>{
-              allSetRows.push({
-                dateStr, exercise, setNumber:s.setNumber, reps:s.reps, weight:s.weight, category, volume:s.volume, week,
-                effort:s.effort, setScore:s.setScore, exerciseScore, workoutScore:0, feeling,
-                helper:s.helper, prWeight:s.prWeight
-              });
+            const [workout, setWorkout] = useState({
+                category: 'Spate',
+                date: new Date().toISOString().split('T')[0],
+                exercises: []
             });
-          }
-        });
 
-        const exScoresMap = new Map();
-        allSetRows.forEach(r=> exScoresMap.set(r.exercise, r.exerciseScore));
-        const workoutScore = computeWorkoutScore(Array.from(exScoresMap.values()));
-        allSetRows.forEach(r=> r.workoutScore = workoutScore);
-        return allSetRows;
-      }
+            const [currentExercises, setCurrentExercises] = useState([
+                { name: exercises['Spate'][0], sets: [{ reps: '', weight: '', effort: 3 }] }
+            ]);
 
-      function rowsToTSV(rows){
-        const header = ['Data','Exercitiu','Set','Reps','Greutate','Zi de?','Volum','Saptamana','Efort rating','Set score','Exercise score','Workout score','Feeling?','Helper','PR weight'].join('\\t');
-        const lines = rows.map(r=> [r.dateStr,r.exercise,r.setNumber,r.reps,r.weight,r.category,r.volume,r.week,r.effort,r.setScore,r.exerciseScore,r.workoutScore,r.feeling,r.helper,r.prWeight].join('\\t'));
-        return [header, ...lines].join('\\n');
-      }
+            const [savedWorkouts, setSavedWorkouts] = useState([]);
+            const [showHistory, setShowHistory] = useState(false);
+            const [sheetsUrl, setSheetsUrl] = useState('');
+            const [showUrlInput, setShowUrlInput] = useState(false);
 
-      // Submit Workout (LOCAL ONLY)
-      const submitWorkoutLocal = () => {
-        const hasAny = currentExercises.some(ex => ex.sets.some(s => s.reps && s.weight!==''));
-        if (!hasAny) { alert('Please add at least one complete set.'); return; }
+            useEffect(() => {
+                const saved = localStorage.getItem('gymWorkouts');
+                if (saved) {
+                    setSavedWorkouts(JSON.parse(saved));
+                }
+                const url = localStorage.getItem('sheetsUrl');
+                if (url) {
+                    setSheetsUrl(url);
+                }
+            }, []);
 
-        const processed = buildProcessedRowsForCurrent();
-        if (!processed.length) { alert('Nothing to save.'); return; }
+            const calculateWorkoutScore = (exercises) => {
+                let totalSetScore = 0;
+                let totalSets = 0;
 
-        const newPending = [...pending, ...processed];
-        setPending(newPending); saveLS(LS_PENDING, newPending);
+                exercises.forEach(ex => {
+                    ex.sets.forEach(set => {
+                        const reps = parseInt(set.reps) || 0;
+                        const weight = parseFloat(set.weight) || 0;
+                        const effort = parseInt(set.effort) || 3;
+                        
+                        totalSetScore += reps * weight * effort;
+                        totalSets++;
+                    });
+                });
 
-        const appendedRaw = processed.map(r => ({
-          dateISO: parseDateToISO(r.dateStr),
-          dateStr: r.dateStr,
-          category: r.category,
-          exercise: r.exercise,
-          setNumber: r.setNumber,
-          reps: r.reps,
-          weight: r.weight,
-          effort: r.effort,
-          volume: r.volume
-        }));
-        const newHist = [...history, ...appendedRaw].sort((a,b)=> a.dateISO.localeCompare(b.dateISO) || a.exercise.localeCompare(b.exercise) || a.setNumber-b.setNumber);
-        setHistory(newHist); saveLS(LS_HISTORY, newHist);
+                if (totalSets === 0) return 0;
+                
+                const score = Math.min(100, Math.round((totalSetScore / (totalSets * 500)) * 100));
+                return score;
+            };
 
-        setCurrentExercises([{ name:(exercisesByCat[workout.category]||[])[0]||'', sets:[{reps:'',weight:'',effort:3}] }]);
-        alert('Workout saved locally 💪 — go to History to submit to Google Sheets.');
-      };
+            const addSet = (exerciseIndex) => {
+                const newExercises = [...currentExercises];
+                const lastSet = newExercises[exerciseIndex].sets[newExercises[exerciseIndex].sets.length - 1];
+                newExercises[exerciseIndex].sets.push({ 
+                    reps: lastSet.reps, 
+                    weight: lastSet.weight, 
+                    effort: lastSet.effort 
+                });
+                setCurrentExercises(newExercises);
+            };
 
-      // Save a Copy (clipboard TSV of current processed rows)
-      const saveCopy = () => {
-        const processed = buildProcessedRowsForCurrent();
-        if (!processed.length) { alert('Nothing to copy.'); return; }
-        const tsv = rowsToTSV(processed);
-        navigator.clipboard.writeText(tsv);
-        alert('Copied TSV to clipboard — paste into your Google Sheet if you prefer manual import.');
-      };
+            const updateSet = (exerciseIndex, setIndex, field, value) => {
+                const newExercises = [...currentExercises];
+                newExercises[exerciseIndex].sets[setIndex][field] = value;
+                setCurrentExercises(newExercises);
+            };
 
-      // Submit to Google Sheets (sends ALL pending rows)
-      const submitPendingToSheets = async () => {
-        if (!sheetsUrl) { setShowUrlInput(true); alert('Please set your Google Sheets Web App URL first.'); return; }
-        if (!pending.length) { alert('No pending data to submit.'); return; }
-        const tsv = rowsToTSV(pending);
-        try{
-          const res = await fetch(sheetsUrl, { method:'POST', headers:{'Content-Type':'text/plain'}, body: tsv, redirect:'follow' });
-          if (res.ok || res.type==='opaque') {
-            alert('Data submitted to Google Sheets! ✅');
-            setPending([]); saveLS(LS_PENDING, []);
-          } else {
-            alert('Submission may have failed. You can use Save a Copy as a fallback.');
-          }
-        }catch(e){
-          alert('Error: '+e.message+' — you can use Save a Copy as a fallback.');
-        }
-      };
+            const removeSet = (exerciseIndex, setIndex) => {
+                const newExercises = [...currentExercises];
+                newExercises[exerciseIndex].sets = newExercises[exerciseIndex].sets.filter((_, i) => i !== setIndex);
+                setCurrentExercises(newExercises);
+            };
 
-      // Import CSV
-      const onImportCsv = (file) => {
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const text = reader.result;
-          const rows = parseCSVText(text);
-          if (!rows.length) { alert('No valid rows found in CSV.'); return; }
-          const newHist = [...history, ...rows].sort((a,b)=> a.dateISO.localeCompare(b.dateISO) || a.exercise.localeCompare(b.exercise) || a.setNumber-b.setNumber);
-          setHistory(newHist); saveLS(LS_HISTORY, newHist);
-          alert(`Imported ${rows.length} rows into history.`);
+            const updateExerciseName = (exerciseIndex, name) => {
+                const newExercises = [...currentExercises];
+                newExercises[exerciseIndex].name = name;
+                setCurrentExercises(newExercises);
+            };
+
+            const addExercise = () => {
+                setCurrentExercises([
+                    ...currentExercises,
+                    { name: exercises[workout.category][0], sets: [{ reps: '', weight: '', effort: 3 }] }
+                ]);
+            };
+
+            const removeExercise = (exerciseIndex) => {
+                setCurrentExercises(currentExercises.filter((_, i) => i !== exerciseIndex));
+            };
+
+            const saveWorkout = () => {
+                const validExercises = currentExercises
+                    .map(ex => ({
+                        ...ex,
+                        sets: ex.sets.filter(s => s.reps && s.weight)
+                    }))
+                    .filter(ex => ex.sets.length > 0);
+
+                if (validExercises.length === 0) {
+                    alert('Please add at least one exercise with complete sets');
+                    return;
+                }
+
+                const score = calculateWorkoutScore(validExercises);
+                const newWorkout = { 
+                    ...workout, 
+                    exercises: validExercises, 
+                    savedAt: new Date().toISOString(),
+                    score: score
+                };
+                const newWorkouts = [...savedWorkouts, newWorkout];
+                setSavedWorkouts(newWorkouts);
+                localStorage.setItem('gymWorkouts', JSON.stringify(newWorkouts));
+
+                setCurrentExercises([{ name: exercises[workout.category][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
+
+                alert(`Workout saved with score: ${score}/100! 💪`);
+            };
+
+            const generateCSV = () => {
+                let csv = '';
+                savedWorkouts.forEach(w => {
+                    w.exercises.forEach(ex => {
+                        ex.sets.forEach((set, idx) => {
+                            csv += `${w.date}\t${ex.name}\t${idx + 1}\t${set.reps}\t${set.weight}\t${w.category}\t\t\t${set.effort || 3}\t${w.score || 0}\n`;
+                        });
+                    });
+                });
+                return csv;
+            };
+
+            const copyToClipboard = () => {
+                const csv = generateCSV();
+                navigator.clipboard.writeText(csv);
+                alert('Data copied! Paste it into your Google Sheet.');
+            };
+
+            const submitToSheets = async () => {
+                if (!sheetsUrl) {
+                    setShowUrlInput(true);
+                    alert('Please set your Google Sheets Web App URL first');
+                    return;
+                }
+
+                const csv = generateCSV();
+                try {
+                    const response = await fetch(sheetsUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'text/plain',
+                        },
+                        body: csv,
+                        redirect: 'follow'
+                    });
+                    
+                    if (response.ok || response.type === 'opaque') {
+                        alert('Data submitted to Google Sheets! Check your sheet to confirm.');
+                        setSavedWorkouts([]);
+                        localStorage.removeItem('gymWorkouts');
+                    } else {
+                        alert('Submission may have failed. Check your Google Sheet or use Copy/Paste.');
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message + '. Try using Copy/Paste instead.');
+                }
+            };
+
+            const saveSheetsUrl = () => {
+                localStorage.setItem('sheetsUrl', sheetsUrl);
+                setShowUrlInput(false);
+                alert('Google Sheets URL saved!');
+            };
+
+            const clearHistory = () => {
+                if (confirm('Clear all saved workouts?')) {
+                    setSavedWorkouts([]);
+                    localStorage.removeItem('gymWorkouts');
+                }
+            };
+
+            const totalVolume = currentExercises.reduce((sum, ex) => {
+                return sum + ex.sets.reduce((s, set) => {
+                    return s + (parseInt(set.reps || 0) * parseFloat(set.weight || 0));
+                }, 0);
+            }, 0);
+
+            const currentScore = calculateWorkoutScore(currentExercises.filter(ex => 
+                ex.sets.some(s => s.reps && s.weight)
+            ));
+
+            return (
+                <div className="min-h-screen p-4">
+                    <div className="max-w-2xl mx-auto">
+                        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-4 border border-white/20">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-3xl">😊</span>
+                                    <h1 className="text-2xl font-bold">Gym Buddy</h1>
+                                </div>
+                                <button
+                                    onClick={() => setShowHistory(!showHistory)}
+                                    className="px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition"
+                                >
+                                    {showHistory ? 'Track' : 'History'}
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm text-purple-300 mb-2">Workout Type</label>
+                                    <select
+                                        value={workout.category}
+                                        onChange={(e) => {
+                                            const cat = e.target.value;
+                                            setWorkout({ ...workout, category: cat });
+                                            setCurrentExercises([{ name: exercises[cat][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
+                                        }}
+                                        className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white"
+                                    >
+                                        {Object.keys(exercises).map(cat => (
+                                            <option key={cat} value={cat}>{cat}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm text-purple-300 mb-2">Date</label>
+                                    <input
+                                        type="date"
+                                        value={workout.date}
+                                        onChange={(e) => setWorkout({ ...workout, date: e.target.value })}
+                                        className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white"
+                                    />
+                                </div>
+                            </div>
+
+                            {(totalVolume > 0 || currentScore > 0) && (
+                                <div className="mt-4 grid grid-cols-2 gap-4">
+                                    <div className="flex items-center gap-2 text-purple-300">
+                                        <TrendingUp className="w-5 h-5" />
+                                        <span className="font-semibold">Volume: {totalVolume.toFixed(0)} kg</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-green-300">
+                                        <span className="text-2xl">🎯</span>
+                                        <span className="font-semibold">Score: {currentScore}/100</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {showHistory ? (
+                            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-bold">Saved Workouts ({savedWorkouts.length})</h2>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setShowUrlInput(!showUrlInput)}
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-sm"
+                                        >
+                                            Setup
+                                        </button>
+                                        <button
+                                            onClick={submitToSheets}
+                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition text-sm flex items-center gap-2"
+                                        >
+                                            <Upload className="w-4 h-4" />
+                                            Submit
+                                        </button>
+                                        <button
+                                            onClick={copyToClipboard}
+                                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition text-sm"
+                                        >
+                                            Copy
+                                        </button>
+                                        <button
+                                            onClick={clearHistory}
+                                            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition text-sm"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {showUrlInput && (
+                                    <div className="mb-4 p-4 bg-white/5 rounded-lg">
+                                        <label className="block text-sm text-purple-300 mb-2">Google Sheets Web App URL</label>
+                                        <input
+                                            type="text"
+                                            value={sheetsUrl}
+                                            onChange={(e) => setSheetsUrl(e.target.value)}
+                                            placeholder="https://script.google.com/macros/s/..."
+                                            className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white placeholder-white/50 mb-2"
+                                        />
+                                        <button
+                                            onClick={saveSheetsUrl}
+                                            className="w-full py-2 bg-green-600 hover:bg-green-700 rounded-lg transition"
+                                        >
+                                            Save URL
+                                        </button>
+                                    </div>
+                                )}
+                                
+                                <div className="space-y-3 max-h-96 overflow-y-auto">
+                                    {savedWorkouts.map((w, idx) => (
+                                        <div key={idx} className="bg-white/5 rounded-lg p-4">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="font-semibold text-purple-300">{w.category}</span>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-sm text-green-300 font-bold">🎯 {w.score || 0}/100</span>
+                                                    <span className="text-sm text-white/60">{w.date}</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-sm text-white/70">
+                                                {w.exercises.map(ex => ex.name).join(', ')}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {savedWorkouts.length === 0 && (
+                                    <p className="text-center text-white/50 py-8">No saved workouts yet</p>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                {currentExercises.map((exercise, exerciseIndex) => (
+                                    <div key={exerciseIndex} className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-4 border border-white/20">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <label className="block text-sm text-purple-300">Exercise {exerciseIndex + 1}</label>
+                                            {currentExercises.length > 1 && (
+                                                <button
+                                                    onClick={() => removeExercise(exerciseIndex)}
+                                                    className="text-red-400 hover:text-red-300"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <select
+                                            value={exercise.name}
+                                            onChange={(e) => updateExerciseName(exerciseIndex, e.target.value)}
+                                            className="w-full mb-4 bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white"
+                                        >
+                                            {exercises[workout.category].map(ex => (
+                                                <option key={ex} value={ex}>{ex}</option>
+                                            ))}
+                                        </select>
+
+                                        <div className="space-y-3 mb-4">
+                                            {exercise.sets.map((set, setIndex) => (
+                                                <div key={setIndex} className="space-y-2">
+                                                    <div className="flex gap-2 items-center">
+                                                        <span className="text-purple-300 font-semibold w-8">{setIndex + 1}</span>
+                                                        <select
+                                                            value={set.reps}
+                                                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', e.target.value)}
+                                                            className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white"
+                                                        >
+                                                            <option value="">Reps</option>
+                                                            {[...Array(40)].map((_, i) => (
+                                                                <option key={i + 1} value={i + 1}>{i + 1}</option>
+                                                            ))}
+                                                        </select>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="Weight (kg)"
+                                                            value={set.weight}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                if (e.target.value === '' || val >= 0) {
+                                                                    updateSet(exerciseIndex, setIndex, 'weight', e.target.value);
+                                                                }
+                                                            }}
+                                                            min="0"
+                                                            step="0.5"
+                                                            className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white placeholder-white/50"
+                                                        />
+                                                        {exercise.sets.length > 1 && (
+                                                            <button
+                                                                onClick={() => removeSet(exerciseIndex, setIndex)}
+                                                                className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"
+                                                            >
+                                                                <Trash2 className="w-5 h-5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    <div className="flex gap-2 pl-10">
+                                                        {[1, 2, 3, 4, 5].map(level => (
+                                                            <button
+                                                                key={level}
+                                                                onClick={() => updateSet(exerciseIndex, setIndex, 'effort', level)}
+                                                                className={`flex-1 py-2 px-1 rounded-lg transition text-xs ${
+                                                                    set.effort === level 
+                                                                        ? 'bg-orange-600 text-white' 
+                                                                        : 'bg-white/10 text-white/60 hover:bg-white/20'
+                                                                }`}
+                                                                title={effortLabels[level]}
+                                                            >
+                                                                {'💪'.repeat(level)}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="text-xs text-purple-300 text-center pl-10">
+                                                        {effortLabels[set.effort || 3]}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <button
+                                            onClick={() => addSet(exerciseIndex)}
+                                            className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-lg transition flex items-center justify-center gap-2 border border-white/30"
+                                        >
+                                            <Plus className="w-5 h-5" />
+                                            Add Set
+                                        </button>
+                                    </div>
+                                ))}
+
+                                <button
+                                    onClick={addExercise}
+                                    className="w-full mb-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition font-semibold flex items-center justify-center gap-2"
+                                >
+                                    <Plus className="w-5 h-5" />
+                                    Add Exercise
+                                </button>
+
+                                <button
+                                    onClick={saveWorkout}
+                                    className="w-full py-4 bg-green-600 hover:bg-green-700 rounded-lg transition font-bold text-lg flex items-center justify-center gap-2"
+                                >
+                                    <Horse className="w-6 h-6" />
+                                    Submit Workout
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
         };
-        reader.readAsText(file);
-      };
 
-      // Reset to 0 (preserve Sheets URL)
-      const resetToZero = () => {
-        if (!confirm('⚠️ This will delete all local workouts and PR data, but KEEP your Google Sheets URL. Continue?')) return;
-        const savedUrl = localStorage.getItem(LS_SHEETS_URL);
-        localStorage.clear();
-        if (savedUrl) localStorage.setItem(LS_SHEETS_URL, savedUrl);
-        alert('🧼 Local data cleared — starting fresh! Your Sheets URL was preserved.');
-        location.reload();
-      };
-
-      // UI
-      return (
-        <div className="min-h-screen p-4">
-          <div className="max-w-3xl mx-auto space-y-4">
-            {/* Header */}
-            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">💪</span>
-                  <h1 className="text-2xl font-bold">Gym Buddy — v3</h1>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={()=>setShowHistory(h=>!h)} className="px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition">
-                    {showHistory ? 'Track' : 'History'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Feeling picker */}
-              <div className="mb-4">
-                <label className="block text-sm text-purple-200 mb-2">How are you feeling today?</label>
-                <div className="flex gap-2">
-                  {['Low battery','OK','Energized'].map(mood => (
-                    <button key={mood} onClick={()=>setWorkout(w=>({...w, feeling:mood}))}
-                      className={`px-3 py-2 rounded-lg transition ${workout.feeling===mood?'bg-yellow-500 text-black':'bg-white/10 hover:bg-white/20 text-white/90'}`}>
-                      {mood==='Low battery'?'🔋':mood==='OK'?'🙂':'⚡'} {mood}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Category + Date */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-purple-200 mb-2">Workout Type</label>
-                  <select value={workout.category} onChange={(e)=>{
-                      const cat = e.target.value;
-                      setWorkout(w=>({...w, category:cat}));
-                      setCurrentExercises([{ name:(exercisesByCat[cat]||[])[0]||'', sets:[{reps:'',weight:'',effort:3}] }]);
-                    }}
-                    className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white">
-                    {Object.keys(exercisesByCat).map(cat=> <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-purple-200 mb-2">Date</label>
-                  <input type="date" value={workout.dateISO} onChange={(e)=>setWorkout(w=>({...w, dateISO:e.target.value}))}
-                    className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white"/>
-                </div>
-              </div>
-
-              {(currentTotalVolume>0) && (
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2 text-purple-300">
-                    <span className="text-2xl">📈</span>
-                    <span className="font-semibold">Volume: {currentTotalVolume.toFixed(0)} kg</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-green-300">
-                    <span className="text-2xl">🧮</span>
-                    <span className="font-semibold">Scores will be computed on save</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Panels */}
-            {showHistory ? (
-              <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-xl font-bold">History</h2>
-                  <div className="flex gap-2">
-                    <label className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-sm cursor-pointer">
-                      Import CSV
-                      <input type="file" accept=".csv,.tsv,text/csv" className="hidden" onChange={(e)=>onImportCsv(e.target.files[0])}/>
-                    </label>
-                    <button onClick={()=>setShowUrlInput(s=>!s)} className="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg transition text-sm">Setup</button>
-                    <button onClick={saveCopy} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition text-sm">Save a Copy</button>
-                    <button onClick={submitPendingToSheets} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition text-sm">
-                      Submit to Google Sheets ({pending.length} rows)
-                    </button>
-                    <button onClick={()=>{ saveLS(LS_HISTORY,[]); setHistory([]); alert('History cleared.'); }} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition text-sm">Clear</button>
-                    <button onClick={resetToZero} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg transition text-sm">Reset to 0</button>
-                  </div>
-                </div>
-
-                {showUrlInput && (
-                  <div className="p-4 bg-white/5 rounded-lg">
-                    <label className="block text-sm text-purple-300 mb-2">Google Sheets Web App URL</label>
-                    <input type="text" value={sheetsUrl} onChange={(e)=>{ setSheetsUrl(e.target.value); localStorage.setItem(LS_SHEETS_URL, e.target.value); }}
-                      placeholder="https://script.google.com/macros/s/..." className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white placeholder-white/50 mb-2"/>
-                    <p className="text-xs text-white/60">URL is saved automatically.</p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="font-semibold mb-2">Local history ({history.length} sets)</h3>
-                    <div className="max-h-72 overflow-y-auto space-y-1 text-sm">
-                      {history.slice().reverse().map((r,idx)=> (
-                        <div key={idx} className="text-white/80 flex gap-2">
-                          <span className="w-24 text-white/60">{r.dateStr}</span>
-                          <span className="flex-1">{r.exercise}</span>
-                          <span className="w-28 text-right text-white/60">{r.reps} × {r.weight}kg</span>
-                        </div>
-                      ))}
-                      {!history.length && <div className="text-white/50 py-8 text-center">No history yet. Import CSV or save a workout.</div>}
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold mb-2">Pending submission ({pending.length} rows)</h3>
-                    <div className="max-h-72 overflow-y-auto text-xs">
-                      {pending.slice().reverse().map((r,idx)=> (
-                        <div key={idx} className="grid grid-cols-6 gap-2 text-white/80 py-1">
-                          <div className="col-span-2">{r.dateStr} — {r.exercise} (S{r.setNumber})</div>
-                          <div>{r.reps}×{r.weight}kg</div>
-                          <div>Eff {r.effort}</div>
-                          <div>Set {r.setScore}</div>
-                          <div>Ex {r.exerciseScore}</div>
-                        </div>
-                      ))}
-                      {!pending.length && <div className="text-white/50 py-8 text-center">Nothing pending — save a workout first.</div>}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Exercise cards */}
-                {currentExercises.map((exercise, exIdx)=> (
-                  <div key={exIdx} className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                    <div className="flex justify-between items-center mb-4">
-                      <label className="block text-sm text-purple-300">Exercise {exIdx+1}</label>
-                      {currentExercises.length>1 && <button onClick={()=>removeExercise(exIdx)} className="text-red-400 hover:text-red-300">🗑️</button>}
-                    </div>
-
-                    <select value={exercise.name} onChange={(e)=>updateExerciseName(exIdx, e.target.value)}
-                      className="w-full mb-4 bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white">
-                      {(exercisesByCat[workout.category]||[]).map(ex=> <option key={ex} value={ex}>{ex}</option>)}
-                    </select>
-
-                    <div className="space-y-4 mb-4">
-                      {exercise.sets.map((set, setIdx)=> {
-                        const dateISO = workout.dateISO;
-                        const exName = exercise.name;
-                        const prW = maxWeightBefore(history, exName, dateISO);
-                        const lastW = lastSessionMaxWeight(history, exName, dateISO);
-                        return (
-                          <div key={setIdx} className="space-y-2">
-                            <div className="flex gap-2 items-center">
-                              <span className="text-purple-300 font-semibold w-8">{setIdx+1}</span>
-                              <select value={set.reps} onChange={(e)=>updateSet(exIdx,setIdx,'reps',e.target.value)}
-                                className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white">
-                                <option value="">Reps</option>
-                                {Array.from({length:40},(_,i)=>i+1).map(v=> <option key={v} value={v}>{v}</option>)}
-                              </select>
-                              <input type="number" placeholder="Weight (kg)" value={set.weight}
-                                onChange={(e)=>{ const val=e.target.value; if (val==='' || parseFloat(val)>=0) updateSet(exIdx,setIdx,'weight',val);}}
-                                min="0" step="0.5"
-                                className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white placeholder-white/50"/>
-                              {exercise.sets.length>1 && <button onClick={()=>removeSet(exIdx,setIdx)} className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition">🗑️</button>}
-                            </div>
-
-                            <EffortSelector value={set.effort||3} onChange={(lvl)=>updateSet(exIdx,setIdx,'effort',lvl)} />
-                            <div className="text-xs text-purple-300 pl-10">{(set.effort && ( {1:'Foarte ușor',2:'Ușor',3:'OK',4:'Greu',5:'Foarte greu'}[set.effort] )) || 'OK'}</div>
-
-                            <div className="text-xs pl-10">
-                              <span className="text-yellow-300">🥇 PR:</span> <span className="text-white/80">{prW!=null? prW+' kg' : 'TBD'}</span>
-                              <span className="text-white/40 mx-2">|</span>
-                              <span className="text-blue-300">⏪ Last:</span> <span className="text-white/80">{lastW!=null? lastW+' kg' : '—'}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <button onClick={()=>addSet(exIdx)} className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-lg transition border border-white/30">+ Add Set</button>
-                  </div>
-                ))}
-
-                <button onClick={addExercise} className="w-full py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition font-semibold">+ Add Exercise</button>
-
-                <div className="flex gap-2">
-                  <button onClick={submitWorkoutLocal} className="flex-1 py-4 bg-green-600 hover:bg-green-700 rounded-lg transition font-bold text-lg">Submit Workout</button>
-                  <button onClick={saveCopy} className="flex-1 py-4 bg-slate-600 hover:bg-slate-700 rounded-lg transition font-bold text-lg">Save a Copy</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    ReactDOM.createRoot(document.getElementById('app')).render(<GymTracker />);
-  </script>
+        ReactDOM.render(<GymTracker />, document.getElementById('app'));
+    </script>
 </body>
 </html>
