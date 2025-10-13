@@ -73,6 +73,7 @@
             const [pendingWorkouts, setPendingWorkouts] = useState([]);
             const [syncing, setSyncing] = useState(false);
             const [lastSync, setLastSync] = useState(null);
+            const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
 
             const [workout, setWorkout] = useState({
                 category: 'Spate',
@@ -105,6 +106,9 @@
                 
                 const sync = localStorage.getItem('lastSync');
                 if (sync) setLastSync(sync);
+
+                const autoSync = localStorage.getItem('autoSyncEnabled');
+                if (autoSync !== null) setAutoSyncEnabled(JSON.parse(autoSync));
             }, []);
 
             // Format date helper
@@ -197,11 +201,13 @@
             };
 
             // Sync from Sheets
-            const syncFromSheets = async () => {
+            const syncFromSheets = async (silent = false) => {
                 if (!sheetsUrl) {
-                    alert('Please set Google Sheets URL first!');
-                    setShowSettings(true);
-                    return;
+                    if (!silent) {
+                        alert('Please set Google Sheets URL first!');
+                        setShowSettings(true);
+                    }
+                    return false;
                 }
 
                 setSyncing(true);
@@ -237,12 +243,37 @@
                     setLastSync(now);
                     localStorage.setItem('lastSync', now);
 
-                    alert(`✅ Synced ${data.length} rows!`);
+                    if (!silent) {
+                        alert(`✅ Synced ${data.length} rows!`);
+                    }
+                    setSyncing(false);
+                    return true;
                 } catch (error) {
-                    alert('Sync failed: ' + error.message);
+                    if (!silent) {
+                        alert('Sync failed: ' + error.message);
+                    }
+                    setSyncing(false);
+                    return false;
                 }
-                setSyncing(false);
             };
+
+            // Auto-sync on mount
+            useEffect(() => {
+                if (autoSyncEnabled && sheetsUrl && !syncing) {
+                    syncFromSheets(true);
+                }
+            }, []);
+
+            // Auto-sync every 5 minutes
+            useEffect(() => {
+                if (!autoSyncEnabled || !sheetsUrl) return;
+
+                const interval = setInterval(() => {
+                    syncFromSheets(true);
+                }, 5 * 60 * 1000); // 5 minutes
+
+                return () => clearInterval(interval);
+            }, [autoSyncEnabled, sheetsUrl]);
 
             // Calculate scores
             const calculateSetScore = (ex, reps, weight, effort) => {
@@ -512,6 +543,19 @@
                                         placeholder="Google Sheets URL"
                                         className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-sm text-white placeholder-white/50"
                                     />
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <input
+                                            type="checkbox"
+                                            id="autoSync"
+                                            checked={autoSyncEnabled}
+                                            onChange={(e) => {
+                                                setAutoSyncEnabled(e.target.checked);
+                                                localStorage.setItem('autoSyncEnabled', JSON.stringify(e.target.checked));
+                                            }}
+                                            className="w-4 h-4"
+                                        />
+                                        <label htmlFor="autoSync" className="text-purple-300">Auto-sync every 5 min</label>
+                                    </div>
                                     <button
                                         onClick={() => {
                                             localStorage.setItem('sheetsUrl', sheetsUrl);
@@ -530,7 +574,7 @@
                             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
                                 <div className="flex gap-2 mb-4">
                                     <button
-                                        onClick={syncFromSheets}
+                                        onClick={() => syncFromSheets(false)}
                                         disabled={syncing}
                                         className="flex-1 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
                                     >
@@ -556,6 +600,9 @@
                                 <div className="text-sm text-white/70">
                                     <p>Historic rows: {historicData.length}</p>
                                     <p>Exercises tracked: {Object.keys(prCache).length}</p>
+                                    <p className="mt-2 text-xs text-purple-300">
+                                        {autoSyncEnabled ? '✅ Auto-sync enabled' : '❌ Auto-sync disabled'}
+                                    </p>
                                 </div>
                             </div>
                         ) : (
@@ -596,6 +643,22 @@
                                                 onChange={(e) => setWorkout({ ...workout, date: e.target.value })}
                                                 className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-sm text-white"
                                             />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-purple-300 mb-1">Workout Type</label>
+                                            <select
+                                                value={workout.category}
+                                                onChange={(e) => {
+                                                    const cat = e.target.value;
+                                                    setWorkout({ ...workout, category: cat });
+                                                    setCurrentExercises([{ name: exercises[cat][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
+                                                }}
+                                                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-sm text-white"
+                                            >
+                                                {Object.keys(exercises).map(cat => (
+                                                    <option key={cat} value={cat}>{cat}</option>
+                                                ))}
+                                            </select>
                                         </div>
                                     </div>
                                 </div>
@@ -764,20 +827,4 @@
         ReactDOM.render(<GymBuddy />, document.getElementById('app'));
     </script>
 </body>
-</html>purple-300 mb-1">Workout Type</label>
-                                            <select
-                                                value={workout.category}
-                                                onChange={(e) => {
-                                                    const cat = e.target.value;
-                                                    setWorkout({ ...workout, category: cat });
-                                                    setCurrentExercises([{ name: exercises[cat][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
-                                                }}
-                                                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-sm text-white"
-                                            >
-                                                {Object.keys(exercises).map(cat => (
-                                                    <option key={cat} value={cat}>{cat}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs text-
+</html>
