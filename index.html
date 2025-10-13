@@ -1,510 +1,730 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Gym Buddy</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white min-h-screen">
-    <div id="app"></div>
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, TrendingUp, RefreshCw, Upload, Settings } from 'lucide-react';
 
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+const GymBuddy = () => {
+  const exercises = {
+    'Spate': ['Lat pulldown', 'Machine row', 'Cable row', 'Diag pulldown', 'Face pulls', 'Hyper extention'],
+    'Piept': ['Bench', 'Bench plates', 'Chest incline press', 'Chest decline press', 'Chest flies', 'Chest downpush'],
+    'Upper body': ['Shoulder press', 'Shoulder lat extension', 'Bar curl', 'Biceps curl', 'Preacher curl', 
+                'Dips', 'Weight assist dips', 'Cable extension', 'Rope extension'],
+    'Picioare': ['Squats', 'Leg extension', 'Leg Curls', 'Calf press']
+  };
 
-    <script type="text/babel">
-        const { useState, useEffect } = React;
+  const [sheetsUrl, setSheetsUrl] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [historicData, setHistoricData] = useState([]);
+  const [prCache, setPrCache] = useState({});
+  const [workoutPRs, setWorkoutPRs] = useState({});
+  const [pendingWorkouts, setPendingWorkouts] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
 
-        const Horse = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="currentColor" viewBox="0 0 24 24">
-                <path d="M20,8h-2.5c0-1.5-0.8-2.5-2-2.5S14,6.5,14,8h-1c-0.6,0-1,0.4-1,1v2c0,0.6,0.4,1,1,1h0.5L12,16H9l-1.5-3H6 c-0.6,0-1,0.4-1,1v5c0,0.6,0.4,1,1,1h1v1c0,0.6,0.4,1,1,1h1c0.6,0,1-0.4,1-1v-1h4v1c0,0.6,0.4,1,1,1h1c0.6,0,1-0.4,1-1v-1h1 c0.6,0,1-0.4,1-1v-5c0-0.6-0.4-1-1-1h-1.5L14,12h0.5c0.6,0,1-0.4,1-1V9c0-0.6-0.4-1-1-1h-0.5c0-0.5,0.2-1,0.5-1s0.5,0.5,0.5,1H20 c0.6,0,1-0.4,1-1S20.6,8,20,8z M16,6c0.3,0,0.5,0.2,0.5,0.5S16.3,7,16,7s-0.5-0.2-0.5-0.5S15.7,6,16,6z"/>
-            </svg>
-        );
+  const [workout, setWorkout] = useState({
+    category: 'Spate',
+    date: new Date().toISOString().split('T')[0],
+    feeling: 'Ok'
+  });
 
-        const Plus = ({ className = "w-5 h-5" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-        );
+  const [currentExercises, setCurrentExercises] = useState([
+    { name: exercises['Spate'][0], sets: [{ reps: '', weight: '', effort: 3 }] }
+  ]);
 
-        const Trash2 = ({ className = "w-5 h-5" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-        );
+  const [showHistory, setShowHistory] = useState(false);
 
-        const TrendingUp = ({ className = "w-5 h-5" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-        );
+  // Load from localStorage
+  useEffect(() => {
+    const url = localStorage.getItem('sheetsUrl');
+    if (url) setSheetsUrl(url);
+    
+    const historic = localStorage.getItem('historicData');
+    if (historic) setHistoricData(JSON.parse(historic));
+    
+    const prs = localStorage.getItem('prCache');
+    if (prs) setPrCache(JSON.parse(prs));
+    
+    const wprs = localStorage.getItem('workoutPRs');
+    if (wprs) setWorkoutPRs(JSON.parse(wprs));
+    
+    const pending = localStorage.getItem('pendingWorkouts');
+    if (pending) setPendingWorkouts(JSON.parse(pending));
+    
+    const sync = localStorage.getItem('lastSync');
+    if (sync) setLastSync(sync);
+  }, []);
 
-        const Upload = ({ className = "w-4 h-4" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-        );
+  // Format date helper
+  const formatDateShort = (dateStr) => {
+    const date = new Date(dateStr);
+    const day = date.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear().toString().slice(-2);
+    return `${day}-${month}-${year}`;
+  };
 
-        const GymTracker = () => {
-            const exercises = {
-                'Spate': ['Lat pulldown', 'Machine row', 'Cable row', 'Diag pulldown', 'Face pulls', 'Hyper extention'],
-                'Piept': ['Bench', 'Bench plates', 'Chest incline press', 'Chest decline press', 'Chest flies', 'Chest downpush'],
-                'Upper body': ['Shoulder press', 'Shoulder lat extension', 'Bar curl', 'Biceps curl', 'Preacher curl', 
-                            'Dips', 'Weight assist dips', 'Cable extension', 'Rope extension'],
-                'Picioare': ['Squats', 'Leg extension', 'Leg Curls', 'Calf press']
-            };
+  const getWeekStart = (dateStr) => {
+    const date = new Date(dateStr);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(date.setDate(diff));
+    return formatDateShort(monday.toISOString().split('T')[0]);
+  };
 
-            const effortLabels = {
-                1: 'Foarte ușor',
-                2: 'Ușor',
-                3: 'OK',
-                4: 'Greu',
-                5: 'Foarte greu'
-            };
+  // Calculate PR from historic data
+  const calculatePRCache = (data) => {
+    const cache = {};
+    const wPRs = {};
 
-            const [workout, setWorkout] = useState({
-                category: 'Spate',
-                date: new Date().toISOString().split('T')[0],
-                exercises: []
-            });
+    data.forEach(row => {
+      const ex = row.Exercitiu;
+      const cat = row['Zi de?'];
+      const weight = parseFloat(row.Greutate);
+      const vol = parseFloat(row.Volum);
+      const date = row.Data;
+      const set = row.Set;
 
-            const [currentExercises, setCurrentExercises] = useState([
-                { name: exercises['Spate'][0], sets: [{ reps: '', weight: '', effort: 3 }] }
-            ]);
-
-            const [savedWorkouts, setSavedWorkouts] = useState([]);
-            const [showHistory, setShowHistory] = useState(false);
-            const [sheetsUrl, setSheetsUrl] = useState('');
-            const [showUrlInput, setShowUrlInput] = useState(false);
-
-            useEffect(() => {
-                const saved = localStorage.getItem('gymWorkouts');
-                if (saved) {
-                    setSavedWorkouts(JSON.parse(saved));
-                }
-                const url = localStorage.getItem('sheetsUrl');
-                if (url) {
-                    setSheetsUrl(url);
-                }
-            }, []);
-
-            const calculateWorkoutScore = (exercises) => {
-                let totalSetScore = 0;
-                let totalSets = 0;
-
-                exercises.forEach(ex => {
-                    ex.sets.forEach(set => {
-                        const reps = parseInt(set.reps) || 0;
-                        const weight = parseFloat(set.weight) || 0;
-                        const effort = parseInt(set.effort) || 3;
-                        
-                        totalSetScore += reps * weight * effort;
-                        totalSets++;
-                    });
-                });
-
-                if (totalSets === 0) return 0;
-                
-                const score = Math.min(100, Math.round((totalSetScore / (totalSets * 500)) * 100));
-                return score;
-            };
-
-            const addSet = (exerciseIndex) => {
-                const newExercises = [...currentExercises];
-                const lastSet = newExercises[exerciseIndex].sets[newExercises[exerciseIndex].sets.length - 1];
-                newExercises[exerciseIndex].sets.push({ 
-                    reps: lastSet.reps, 
-                    weight: lastSet.weight, 
-                    effort: lastSet.effort 
-                });
-                setCurrentExercises(newExercises);
-            };
-
-            const updateSet = (exerciseIndex, setIndex, field, value) => {
-                const newExercises = [...currentExercises];
-                newExercises[exerciseIndex].sets[setIndex][field] = value;
-                setCurrentExercises(newExercises);
-            };
-
-            const removeSet = (exerciseIndex, setIndex) => {
-                const newExercises = [...currentExercises];
-                newExercises[exerciseIndex].sets = newExercises[exerciseIndex].sets.filter((_, i) => i !== setIndex);
-                setCurrentExercises(newExercises);
-            };
-
-            const updateExerciseName = (exerciseIndex, name) => {
-                const newExercises = [...currentExercises];
-                newExercises[exerciseIndex].name = name;
-                setCurrentExercises(newExercises);
-            };
-
-            const addExercise = () => {
-                setCurrentExercises([
-                    ...currentExercises,
-                    { name: exercises[workout.category][0], sets: [{ reps: '', weight: '', effort: 3 }] }
-                ]);
-            };
-
-            const removeExercise = (exerciseIndex) => {
-                setCurrentExercises(currentExercises.filter((_, i) => i !== exerciseIndex));
-            };
-
-            const saveWorkout = () => {
-                const validExercises = currentExercises
-                    .map(ex => ({
-                        ...ex,
-                        sets: ex.sets.filter(s => s.reps && s.weight)
-                    }))
-                    .filter(ex => ex.sets.length > 0);
-
-                if (validExercises.length === 0) {
-                    alert('Please add at least one exercise with complete sets');
-                    return;
-                }
-
-                const score = calculateWorkoutScore(validExercises);
-                const newWorkout = { 
-                    ...workout, 
-                    exercises: validExercises, 
-                    savedAt: new Date().toISOString(),
-                    score: score
-                };
-                const newWorkouts = [...savedWorkouts, newWorkout];
-                setSavedWorkouts(newWorkouts);
-                localStorage.setItem('gymWorkouts', JSON.stringify(newWorkouts));
-
-                setCurrentExercises([{ name: exercises[workout.category][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
-
-                alert(`Workout saved with score: ${score}/100! 💪`);
-            };
-
-            const generateCSV = () => {
-                let csv = '';
-                savedWorkouts.forEach(w => {
-                    w.exercises.forEach(ex => {
-                        ex.sets.forEach((set, idx) => {
-                            csv += `${w.date}\t${ex.name}\t${idx + 1}\t${set.reps}\t${set.weight}\t${w.category}\t\t\t${set.effort || 3}\t${w.score || 0}\n`;
-                        });
-                    });
-                });
-                return csv;
-            };
-
-            const copyToClipboard = () => {
-                const csv = generateCSV();
-                navigator.clipboard.writeText(csv);
-                alert('Data copied! Paste it into your Google Sheet.');
-            };
-
-            const submitToSheets = async () => {
-                if (!sheetsUrl) {
-                    setShowUrlInput(true);
-                    alert('Please set your Google Sheets Web App URL first');
-                    return;
-                }
-
-                const csv = generateCSV();
-                try {
-                    const response = await fetch(sheetsUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'text/plain',
-                        },
-                        body: csv,
-                        redirect: 'follow'
-                    });
-                    
-                    if (response.ok || response.type === 'opaque') {
-                        alert('Data submitted to Google Sheets! Check your sheet to confirm.');
-                        setSavedWorkouts([]);
-                        localStorage.removeItem('gymWorkouts');
-                    } else {
-                        alert('Submission may have failed. Check your Google Sheet or use Copy/Paste.');
-                    }
-                } catch (error) {
-                    alert('Error: ' + error.message + '. Try using Copy/Paste instead.');
-                }
-            };
-
-            const saveSheetsUrl = () => {
-                localStorage.setItem('sheetsUrl', sheetsUrl);
-                setShowUrlInput(false);
-                alert('Google Sheets URL saved!');
-            };
-
-            const clearHistory = () => {
-                if (confirm('Clear all saved workouts?')) {
-                    setSavedWorkouts([]);
-                    localStorage.removeItem('gymWorkouts');
-                }
-            };
-
-            const totalVolume = currentExercises.reduce((sum, ex) => {
-                return sum + ex.sets.reduce((s, set) => {
-                    return s + (parseInt(set.reps || 0) * parseFloat(set.weight || 0));
-                }, 0);
-            }, 0);
-
-            const currentScore = calculateWorkoutScore(currentExercises.filter(ex => 
-                ex.sets.some(s => s.reps && s.weight)
-            ));
-
-            return (
-                <div className="min-h-screen p-4">
-                    <div className="max-w-2xl mx-auto">
-                        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-4 border border-white/20">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-3xl">😊</span>
-                                    <h1 className="text-2xl font-bold">Gym Buddy</h1>
-                                </div>
-                                <button
-                                    onClick={() => setShowHistory(!showHistory)}
-                                    className="px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition"
-                                >
-                                    {showHistory ? 'Track' : 'History'}
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm text-purple-300 mb-2">Workout Type</label>
-                                    <select
-                                        value={workout.category}
-                                        onChange={(e) => {
-                                            const cat = e.target.value;
-                                            setWorkout({ ...workout, category: cat });
-                                            setCurrentExercises([{ name: exercises[cat][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
-                                        }}
-                                        className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white"
-                                    >
-                                        {Object.keys(exercises).map(cat => (
-                                            <option key={cat} value={cat}>{cat}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm text-purple-300 mb-2">Date</label>
-                                    <input
-                                        type="date"
-                                        value={workout.date}
-                                        onChange={(e) => setWorkout({ ...workout, date: e.target.value })}
-                                        className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white"
-                                    />
-                                </div>
-                            </div>
-
-                            {(totalVolume > 0 || currentScore > 0) && (
-                                <div className="mt-4 grid grid-cols-2 gap-4">
-                                    <div className="flex items-center gap-2 text-purple-300">
-                                        <TrendingUp className="w-5 h-5" />
-                                        <span className="font-semibold">Volume: {totalVolume.toFixed(0)} kg</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-green-300">
-                                        <span className="text-2xl">🎯</span>
-                                        <span className="font-semibold">Score: {currentScore}/100</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {showHistory ? (
-                            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-xl font-bold">Saved Workouts ({savedWorkouts.length})</h2>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setShowUrlInput(!showUrlInput)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-sm"
-                                        >
-                                            Setup
-                                        </button>
-                                        <button
-                                            onClick={submitToSheets}
-                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition text-sm flex items-center gap-2"
-                                        >
-                                            <Upload className="w-4 h-4" />
-                                            Submit
-                                        </button>
-                                        <button
-                                            onClick={copyToClipboard}
-                                            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition text-sm"
-                                        >
-                                            Copy
-                                        </button>
-                                        <button
-                                            onClick={clearHistory}
-                                            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition text-sm"
-                                        >
-                                            Clear
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {showUrlInput && (
-                                    <div className="mb-4 p-4 bg-white/5 rounded-lg">
-                                        <label className="block text-sm text-purple-300 mb-2">Google Sheets Web App URL</label>
-                                        <input
-                                            type="text"
-                                            value={sheetsUrl}
-                                            onChange={(e) => setSheetsUrl(e.target.value)}
-                                            placeholder="https://script.google.com/macros/s/..."
-                                            className="w-full bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white placeholder-white/50 mb-2"
-                                        />
-                                        <button
-                                            onClick={saveSheetsUrl}
-                                            className="w-full py-2 bg-green-600 hover:bg-green-700 rounded-lg transition"
-                                        >
-                                            Save URL
-                                        </button>
-                                    </div>
-                                )}
-                                
-                                <div className="space-y-3 max-h-96 overflow-y-auto">
-                                    {savedWorkouts.map((w, idx) => (
-                                        <div key={idx} className="bg-white/5 rounded-lg p-4">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="font-semibold text-purple-300">{w.category}</span>
-                                                <div className="flex items-center gap-3">
-                                                    <span className="text-sm text-green-300 font-bold">🎯 {w.score || 0}/100</span>
-                                                    <span className="text-sm text-white/60">{w.date}</span>
-                                                </div>
-                                            </div>
-                                            <div className="text-sm text-white/70">
-                                                {w.exercises.map(ex => ex.name).join(', ')}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {savedWorkouts.length === 0 && (
-                                    <p className="text-center text-white/50 py-8">No saved workouts yet</p>
-                                )}
-                            </div>
-                        ) : (
-                            <>
-                                {currentExercises.map((exercise, exerciseIndex) => (
-                                    <div key={exerciseIndex} className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-4 border border-white/20">
-                                        <div className="flex justify-between items-center mb-4">
-                                            <label className="block text-sm text-purple-300">Exercise {exerciseIndex + 1}</label>
-                                            {currentExercises.length > 1 && (
-                                                <button
-                                                    onClick={() => removeExercise(exerciseIndex)}
-                                                    className="text-red-400 hover:text-red-300"
-                                                >
-                                                    <Trash2 className="w-5 h-5" />
-                                                </button>
-                                            )}
-                                        </div>
-
-                                        <select
-                                            value={exercise.name}
-                                            onChange={(e) => updateExerciseName(exerciseIndex, e.target.value)}
-                                            className="w-full mb-4 bg-white/20 border border-white/30 rounded-lg px-4 py-2 text-white"
-                                        >
-                                            {exercises[workout.category].map(ex => (
-                                                <option key={ex} value={ex}>{ex}</option>
-                                            ))}
-                                        </select>
-
-                                        <div className="space-y-3 mb-4">
-                                            {exercise.sets.map((set, setIndex) => (
-                                                <div key={setIndex} className="space-y-2">
-                                                    <div className="flex gap-2 items-center">
-                                                        <span className="text-purple-300 font-semibold w-8">{setIndex + 1}</span>
-                                                        <select
-                                                            value={set.reps}
-                                                            onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', e.target.value)}
-                                                            className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white"
-                                                        >
-                                                            <option value="">Reps</option>
-                                                            {[...Array(40)].map((_, i) => (
-                                                                <option key={i + 1} value={i + 1}>{i + 1}</option>
-                                                            ))}
-                                                        </select>
-                                                        <input
-                                                            type="number"
-                                                            placeholder="Weight (kg)"
-                                                            value={set.weight}
-                                                            onChange={(e) => {
-                                                                const val = parseFloat(e.target.value);
-                                                                if (e.target.value === '' || val >= 0) {
-                                                                    updateSet(exerciseIndex, setIndex, 'weight', e.target.value);
-                                                                }
-                                                            }}
-                                                            min="0"
-                                                            step="0.5"
-                                                            className="flex-1 bg-white/20 border border-white/30 rounded-lg px-4 py-3 text-white placeholder-white/50"
-                                                        />
-                                                        {exercise.sets.length > 1 && (
-                                                            <button
-                                                                onClick={() => removeSet(exerciseIndex, setIndex)}
-                                                                className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"
-                                                            >
-                                                                <Trash2 className="w-5 h-5" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    <div className="flex gap-2 pl-10">
-                                                        {[1, 2, 3, 4, 5].map(level => (
-                                                            <button
-                                                                key={level}
-                                                                onClick={() => updateSet(exerciseIndex, setIndex, 'effort', level)}
-                                                                className={`flex-1 py-2 px-1 rounded-lg transition text-xs ${
-                                                                    set.effort === level 
-                                                                        ? 'bg-orange-600 text-white' 
-                                                                        : 'bg-white/10 text-white/60 hover:bg-white/20'
-                                                                }`}
-                                                                title={effortLabels[level]}
-                                                            >
-                                                                {'💪'.repeat(level)}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    <div className="text-xs text-purple-300 text-center pl-10">
-                                                        {effortLabels[set.effort || 3]}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-
-                                        <button
-                                            onClick={() => addSet(exerciseIndex)}
-                                            className="w-full py-3 bg-white/10 hover:bg-white/20 rounded-lg transition flex items-center justify-center gap-2 border border-white/30"
-                                        >
-                                            <Plus className="w-5 h-5" />
-                                            Add Set
-                                        </button>
-                                    </div>
-                                ))}
-
-                                <button
-                                    onClick={addExercise}
-                                    className="w-full mb-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg transition font-semibold flex items-center justify-center gap-2"
-                                >
-                                    <Plus className="w-5 h-5" />
-                                    Add Exercise
-                                </button>
-
-                                <button
-                                    onClick={saveWorkout}
-                                    className="w-full py-4 bg-green-600 hover:bg-green-700 rounded-lg transition font-bold text-lg flex items-center justify-center gap-2"
-                                >
-                                    <Horse className="w-6 h-6" />
-                                    Submit Workout
-                                </button>
-                            </>
-                        )}
-                    </div>
-                </div>
-            );
+      // PR per exercise
+      if (!cache[ex]) {
+        cache[ex] = {
+          prWeight: weight,
+          prVolSet: vol,
+          prVolEx: 0,
+          lastWeights: {}
         };
+      } else {
+        if (weight > cache[ex].prWeight) cache[ex].prWeight = weight;
+        if (vol > cache[ex].prVolSet) cache[ex].prVolSet = vol;
+      }
 
-        ReactDOM.render(<GymTracker />, document.getElementById('app'));
-    </script>
-</body>
-</html>
+      // Last weights per set number
+      if (!cache[ex].lastWeights[set]) {
+        cache[ex].lastWeights[set] = { weight, date };
+      } else {
+        const lastDate = new Date(cache[ex].lastWeights[set].date);
+        const currentDate = new Date(date);
+        if (currentDate > lastDate) {
+          cache[ex].lastWeights[set] = { weight, date };
+        }
+      }
+    });
+
+    // Calculate PR vol per exercise (sum of volumes per workout)
+    const workoutGroups = {};
+    data.forEach(row => {
+      const key = `${row.Data}_${row.Exercitiu}`;
+      if (!workoutGroups[key]) workoutGroups[key] = 0;
+      workoutGroups[key] += parseFloat(row.Volum);
+    });
+
+    Object.keys(workoutGroups).forEach(key => {
+      const ex = key.split('_')[1];
+      if (cache[ex]) {
+        cache[ex].prVolEx = Math.max(cache[ex].prVolEx || 0, workoutGroups[key]);
+      }
+    });
+
+    // Calculate PR vol per workout category
+    const catGroups = {};
+    data.forEach(row => {
+      const key = `${row.Data}_${row['Zi de?']}`;
+      if (!catGroups[key]) catGroups[key] = 0;
+      catGroups[key] += parseFloat(row.Volum);
+    });
+
+    Object.keys(catGroups).forEach(key => {
+      const cat = key.split('_')[1];
+      wPRs[cat] = Math.max(wPRs[cat] || 0, catGroups[key]);
+    });
+
+    return { cache, wPRs };
+  };
+
+  // Sync from Sheets
+  const syncFromSheets = async () => {
+    if (!sheetsUrl) {
+      alert('Please set Google Sheets URL first!');
+      setShowSettings(true);
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      const response = await fetch(sheetsUrl);
+      const text = await response.text();
+      
+      const lines = text.split('\n').filter(l => l.trim());
+      const headers = lines[0].split('\t');
+      
+      const data = lines.slice(1).map(line => {
+        const values = line.split('\t');
+        const row = {};
+        headers.forEach((h, i) => {
+          row[h] = values[i] || '';
+        });
+        // Parse date if it's in full format
+        if (row.Data && row.Data.includes('GMT')) {
+          row.Data = formatDateShort(row.Data);
+        }
+        return row;
+      });
+
+      setHistoricData(data);
+      localStorage.setItem('historicData', JSON.stringify(data));
+
+      const { cache, wPRs } = calculatePRCache(data);
+      setPrCache(cache);
+      setWorkoutPRs(wPRs);
+      localStorage.setItem('prCache', JSON.stringify(cache));
+      localStorage.setItem('workoutPRs', JSON.stringify(wPRs));
+
+      const now = new Date().toISOString();
+      setLastSync(now);
+      localStorage.setItem('lastSync', now);
+
+      alert(`✅ Synced ${data.length} rows!`);
+    } catch (error) {
+      alert('Sync failed: ' + error.message);
+    }
+    setSyncing(false);
+  };
+
+  // Calculate scores
+  const calculateSetScore = (ex, reps, weight, effort) => {
+    const vol = reps * weight;
+    const pr = prCache[ex];
+
+    if (!pr || !pr.prVolSet) {
+      // First time - reps-based scoring
+      let repsAdj;
+      if (reps <= 6) repsAdj = reps * 3;
+      else if (reps <= 10) repsAdj = 18 + (reps - 6) * 2.5;
+      else repsAdj = 28 + (reps - 10) * 1.2;
+
+      const effortAdj = repsAdj + (effort - 1) * 5;
+      const maxEff = [70, 80, 85, 95, 100][effort - 1];
+      return Math.round(Math.min(maxEff, effortAdj));
+    }
+
+    // With PR - ratio-based
+    const ratioRaw = vol / pr.prVolSet;
+    const effortMult = 0.85 + effort * 0.06;
+    const ratioAdj = ratioRaw * effortMult;
+
+    if (ratioAdj >= 1.07) return 100;
+    if (ratioAdj >= 1.05) return Math.round(97 + (ratioAdj - 1.05) / 0.02 * 3);
+    if (ratioAdj >= 1) return Math.round(92 + (ratioAdj - 1) / 0.05 * 5);
+    if (ratioAdj >= 0.9) return Math.round(85 + (ratioAdj - 0.9) / 0.1 * 7);
+    if (ratioAdj >= 0.8) return Math.round(75 + (ratioAdj - 0.8) / 0.1 * 10);
+    return Math.round(ratioAdj / 0.8 * 75);
+  };
+
+  const calculateExerciseScore = (ex, sets) => {
+    const validSets = sets.filter(s => s.reps && s.weight);
+    if (validSets.length === 0) return 0;
+
+    const avgSetScore = validSets.reduce((sum, s) => {
+      return sum + calculateSetScore(ex, parseInt(s.reps), parseFloat(s.weight), s.effort);
+    }, 0) / validSets.length;
+
+    const currentVol = validSets.reduce((sum, s) => sum + parseInt(s.reps) * parseFloat(s.weight), 0);
+    const pr = prCache[ex];
+
+    if (!pr || !pr.prVolEx) return Math.round(avgSetScore);
+
+    const ratio = Math.min(1.15, currentVol / pr.prVolEx);
+    return Math.round(Math.min(100, avgSetScore * 0.7 + avgSetScore * 0.3 * ratio));
+  };
+
+  const calculateWorkoutScore = () => {
+    const validExercises = currentExercises.filter(ex => 
+      ex.sets.some(s => s.reps && s.weight)
+    );
+
+    if (validExercises.length === 0) return 0;
+
+    const exScores = validExercises.map(ex => calculateExerciseScore(ex.name, ex.sets));
+    const avgExScore = exScores.reduce((a, b) => a + b, 0) / exScores.length;
+
+    const currentVol = validExercises.reduce((sum, ex) => {
+      return sum + ex.sets.reduce((s, set) => {
+        if (!set.reps || !set.weight) return s;
+        return s + parseInt(set.reps) * parseFloat(set.weight);
+      }, 0);
+    }, 0);
+
+    const prVol = workoutPRs[workout.category];
+    if (!prVol) return Math.round(avgExScore);
+
+    const ratio = Math.min(1.15, currentVol / prVol);
+    return Math.round(Math.min(100, avgExScore * 0.7 + avgExScore * 0.3 * ratio));
+  };
+
+  const currentWorkoutScore = calculateWorkoutScore();
+
+  // UI Handlers
+  const addSet = (exerciseIndex) => {
+    const newExercises = [...currentExercises];
+    const lastSet = newExercises[exerciseIndex].sets[newExercises[exerciseIndex].sets.length - 1];
+    newExercises[exerciseIndex].sets.push({ 
+      reps: lastSet.reps, 
+      weight: lastSet.weight, 
+      effort: lastSet.effort 
+    });
+    setCurrentExercises(newExercises);
+  };
+
+  const updateSet = (exerciseIndex, setIndex, field, value) => {
+    const newExercises = [...currentExercises];
+    newExercises[exerciseIndex].sets[setIndex][field] = value;
+    setCurrentExercises(newExercises);
+  };
+
+  const removeSet = (exerciseIndex, setIndex) => {
+    const newExercises = [...currentExercises];
+    newExercises[exerciseIndex].sets = newExercises[exerciseIndex].sets.filter((_, i) => i !== setIndex);
+    setCurrentExercises(newExercises);
+  };
+
+  const updateExerciseName = (exerciseIndex, name) => {
+    const newExercises = [...currentExercises];
+    newExercises[exerciseIndex].name = name;
+    setCurrentExercises(newExercises);
+  };
+
+  const addExercise = () => {
+    setCurrentExercises([
+      ...currentExercises,
+      { name: exercises[workout.category][0], sets: [{ reps: '', weight: '', effort: 3 }] }
+    ]);
+  };
+
+  const removeExercise = (exerciseIndex) => {
+    setCurrentExercises(currentExercises.filter((_, i) => i !== exerciseIndex));
+  };
+
+  const saveWorkout = () => {
+    const validExercises = currentExercises
+      .map(ex => ({
+        ...ex,
+        sets: ex.sets.filter(s => s.reps && s.weight)
+      }))
+      .filter(ex => ex.sets.length > 0);
+
+    if (validExercises.length === 0) {
+      alert('Add at least one complete set!');
+      return;
+    }
+
+    // Generate rows
+    const rows = [];
+    const dateShort = formatDateShort(workout.date);
+    const weekStart = getWeekStart(workout.date);
+    const workoutScore = calculateWorkoutScore();
+
+    validExercises.forEach(ex => {
+      const exScore = calculateExerciseScore(ex.name, ex.sets);
+      
+      ex.sets.forEach((set, idx) => {
+        const vol = parseInt(set.reps) * parseFloat(set.weight);
+        const setScore = calculateSetScore(ex.name, parseInt(set.reps), parseFloat(set.weight), set.effort);
+        
+        const pr = prCache[ex.name] || {};
+        const prVolSet = pr.prVolSet || 'TBD';
+        const prWeight = pr.prWeight || 'TBD';
+        const prVolEx = pr.prVolEx || 'TBD';
+        const prVolWorkout = workoutPRs[workout.category] || 'TBD';
+
+        rows.push([
+          dateShort,
+          ex.name,
+          idx + 1,
+          set.reps,
+          set.weight,
+          workout.category,
+          vol,
+          weekStart,
+          set.effort,
+          setScore,
+          exScore,
+          workoutScore,
+          workout.feeling,
+          prVolSet,
+          prWeight,
+          prVolEx,
+          prVolWorkout
+        ].join('\t'));
+      });
+    });
+
+    const newPending = [...pendingWorkouts, {
+      id: Date.now(),
+      data: rows.join('\n'),
+      attempts: 0,
+      timestamp: new Date().toISOString()
+    }];
+
+    setPendingWorkouts(newPending);
+    localStorage.setItem('pendingWorkouts', JSON.stringify(newPending));
+
+    // Reset form
+    setCurrentExercises([{ name: exercises[workout.category][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
+    alert(`Workout saved! ${newPending.length} pending sync.`);
+  };
+
+  const syncPending = async () => {
+    if (pendingWorkouts.length === 0) {
+      alert('No pending workouts!');
+      return;
+    }
+
+    if (!sheetsUrl) {
+      alert('Set Google Sheets URL first!');
+      setShowSettings(true);
+      return;
+    }
+
+    setSyncing(true);
+    let synced = 0;
+
+    for (const workout of pendingWorkouts) {
+      try {
+        const response = await fetch(sheetsUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: workout.data,
+          redirect: 'follow'
+        });
+
+        if (response.ok) {
+          synced++;
+          setPendingWorkouts(prev => prev.filter(w => w.id !== workout.id));
+        }
+      } catch (error) {
+        console.error('Sync error:', error);
+      }
+    }
+
+    const remaining = pendingWorkouts.length - synced;
+    localStorage.setItem('pendingWorkouts', JSON.stringify(pendingWorkouts.filter((_, i) => i >= synced)));
+    
+    setSyncing(false);
+    alert(`✅ Synced ${synced} workouts! ${remaining} remaining.`);
+    
+    if (synced > 0) {
+      await syncFromSheets();
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white p-3">
+      <div className="max-w-lg mx-auto">
+        {/* Header */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 mb-3 border border-white/20">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">💪</span>
+              <h1 className="text-xl font-bold">Gym Buddy</h1>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className="px-3 py-1.5 text-sm bg-purple-600 rounded-lg hover:bg-purple-700 transition"
+              >
+                {showHistory ? 'Track' : 'History'}
+              </button>
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 transition"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {!showHistory && currentWorkoutScore > 0 && (
+            <div className="flex items-center justify-between bg-white/5 rounded-lg p-2">
+              <span className="text-sm text-purple-300">Workout Score:</span>
+              <span className="text-lg font-bold text-green-400">{currentWorkoutScore}/100</span>
+            </div>
+          )}
+
+          {showSettings && (
+            <div className="mt-3 p-3 bg-white/5 rounded-lg space-y-2">
+              <input
+                type="text"
+                value={sheetsUrl}
+                onChange={(e) => setSheetsUrl(e.target.value)}
+                placeholder="Google Sheets URL"
+                className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-sm text-white placeholder-white/50"
+              />
+              <button
+                onClick={() => {
+                  localStorage.setItem('sheetsUrl', sheetsUrl);
+                  setShowSettings(false);
+                  alert('URL saved!');
+                }}
+                className="w-full py-2 text-sm bg-green-600 hover:bg-green-700 rounded-lg transition"
+              >
+                Save URL
+              </button>
+            </div>
+          )}
+        </div>
+
+        {showHistory ? (
+          <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 border border-white/20">
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={syncFromSheets}
+                disabled={syncing}
+                className="flex-1 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                Sync from Sheets
+              </button>
+              <button
+                onClick={syncPending}
+                disabled={syncing || pendingWorkouts.length === 0}
+                className="flex-1 py-2 text-sm bg-green-600 hover:bg-green-700 rounded-lg transition flex items-center justify-center gap-2 disabled:opacity-50 relative"
+              >
+                <Upload className="w-4 h-4" />
+                Push ({pendingWorkouts.length})
+              </button>
+            </div>
+
+            {lastSync && (
+              <p className="text-xs text-white/50 text-center mb-3">
+                Last sync: {new Date(lastSync).toLocaleString()}
+              </p>
+            )}
+
+            <div className="text-sm text-white/70">
+              <p>Historic rows: {historicData.length}</p>
+              <p>Exercises tracked: {Object.keys(prCache).length}</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Feeling Question */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 mb-3 border border-white/20">
+              <label className="block text-sm text-purple-300 mb-2">How are you feeling today?</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'Battery low', emoji: '🪫', label: 'Low' },
+                  { value: 'Ok', emoji: '😊', label: 'Ok' },
+                  { value: 'Energized', emoji: '⚡', label: 'Energized' }
+                ].map(({ value, emoji, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setWorkout({ ...workout, feeling: value })}
+                    className={`py-2 rounded-lg transition text-sm ${
+                      workout.feeling === value
+                        ? 'bg-orange-600 text-white'
+                        : 'bg-white/10 text-white/60 hover:bg-white/20'
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">{emoji}</div>
+                    <div>{label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Workout Setup */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4 mb-3 border border-white/20">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-purple-300 mb-1">Workout Type</label>
+                  <select
+                    value={workout.category}
+                    onChange={(e) => {
+                      const cat = e.target.value;
+                      setWorkout({ ...workout, category: cat });
+                      setCurrentExercises([{ name: exercises[cat][0], sets: [{ reps: '', weight: '', effort: 3 }] }]);
+                    }}
+                    className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-sm text-white"
+                  >
+                    {Object.keys(exercises).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-purple-300 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={workout.date}
+                    onChange={(e) => setWorkout({ ...workout, date: e.target.value })}
+                    className="w-full bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-sm text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Exercises */}
+            {currentExercises.map((exercise, exerciseIndex) => {
+              const pr = prCache[exercise.name];
+              return (
+                <div key={exerciseIndex} className="bg-white/10 backdrop-blur-lg rounded-xl p-4 mb-3 border border-white/20">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs text-purple-300">Exercise {exerciseIndex + 1}</span>
+                    {currentExercises.length > 1 && (
+                      <button
+                        onClick={() => removeExercise(exerciseIndex)}
+                        className="text-red-400 hover:text-red-300 p-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={exercise.name}
+                    onChange={(e) => updateExerciseName(exerciseIndex, e.target.value)}
+                    className="w-full mb-2 bg-white/20 border border-white/30 rounded-lg px-3 py-2 text-sm text-white"
+                  >
+                    {exercises[workout.category].map(ex => (
+                      <option key={ex} value={ex}>{ex}</option>
+                    ))}
+                  </select>
+
+                  {pr ? (
+                    <div className="text-xs text-purple-300/60 mb-3 flex items-center gap-3">
+                      <span>💪 PR Weight: <strong>{pr.prWeight}kg</strong></span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-white/40 mb-3">No PR yet</div>
+                  )}
+
+                  <div className="space-y-3 mb-3">
+                    {exercise.sets.map((set, setIndex) => {
+                      const lastWeight = pr?.lastWeights?.[setIndex + 1]?.weight;
+                      return (
+                        <div key={setIndex} className="space-y-2">
+                          <div className="flex gap-2 items-center">
+                            <span className="text-purple-300 font-semibold text-sm w-6">{setIndex + 1}</span>
+                            <select
+                              value={set.reps}
+                              onChange={(e) => updateSet(exerciseIndex, setIndex, 'reps', e.target.value)}
+                              className="flex-1 bg-white/20 border border-white/30 rounded-lg px-2 py-2 text-sm text-white"
+                            >
+                              <option value="">Reps</option>
+                              {[...Array(40)].map((_, i) => (
+                                <option key={i + 1} value={i + 1}>{i + 1}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              placeholder="kg"
+                              value={set.weight}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                if (e.target.value === '' || val >= 0) {
+                                  updateSet(exerciseIndex, setIndex, 'weight', e.target.value);
+                                }
+                              }}
+                              min="0"
+                              step="0.5"
+                              className="flex-1 bg-white/20 border border-white/30 rounded-lg px-2 py-2 text-sm text-white placeholder-white/50"
+                            />
+                            {exercise.sets.length > 1 && (
+                              <button
+                                onClick={() => removeSet(exerciseIndex, setIndex)}
+                                className="p-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg transition"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                          
+                          {lastWeight && (
+                            <div className="text-xs text-blue-300/60 pl-8 flex items-center gap-1">
+                              <span>📊 Last Set {setIndex + 1}:</span>
+                              <strong>{lastWeight}kg</strong>
+                            </div>
+                          )}
+
+                          <div className="flex gap-1 pl-8">
+                            {[1, 2, 3, 4, 5].map(level => (
+                              <button
+                                key={level}
+                                onClick={() => updateSet(exerciseIndex, setIndex, 'effort', level)}
+                                onMouseEnter={(e) => {
+                                  // Hover preview
+                                  const btns = e.currentTarget.parentElement.children;
+                                  for (let i = 0; i < btns.length; i++) {
+                                    if (i < level) {
+                                      btns[i].style.opacity = '1';
+                                      btns[i].style.filter = 'brightness(1.2)';
+                                    } else {
+                                      btns[i].style.opacity = '0.3';
+                                      btns[i].style.filter = 'brightness(0.5)';
+                                    }
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  const btns = e.currentTarget.parentElement.children;
+                                  for (let i = 0; i < btns.length; i++) {
+                                    if (i < set.effort) {
+                                      btns[i].style.opacity = '1';
+                                      btns[i].style.filter = 'brightness(1)';
+                                    } else {
+                                      btns[i].style.opacity = '0.3';
+                                      btns[i].style.filter = 'brightness(0.5)';
+                                    }
+                                  }
+                                }}
+                                className={`flex-1 py-1 rounded transition-all ${
+                                  level <= set.effort ? 'opacity-100' : 'opacity-30'
+                                }`}
+                                style={{ 
+                                  fontSize: '18px',
+                                  filter: level <= set.effort ? 'brightness(1)' : 'brightness(0.5)'
+                                }}
+                              >
+                                💪
+                              </button>
+                            ))}
+                          </div>
+                          <div className="text-xs text-purple-300/60 text-center pl-8">
+                            {['Foarte ușor', 'Ușor', 'OK', 'Greu', 'Foarte greu'][set.effort - 1]}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => addSet(exerciseIndex)}
+                    className="w-full py-2 text-sm bg-white/10 hover:bg-white/20 rounded-lg transition flex items-center justify-center gap-2 border border-white/30"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Set
+                  </button>
+                </div>
+              );
+            })}
+
+            <button
+              onClick={addExercise}
+              className="w-full mb-3 py-2 text-sm bg-purple-600 hover:bg-purple-700 rounded-lg transition font-semibold flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Exercise
+            </button>
+
+            <button
+              onClick={saveWorkout}
+              className="w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg transition font-bold flex items-center justify-center gap-2"
+            >
+              <TrendingUp className="w-5 h-5" />
+              Save Workout
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default GymBuddy;
